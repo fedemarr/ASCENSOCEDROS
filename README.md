@@ -4,6 +4,8 @@ Sistema completo de invitaciones y control de ingreso, con el escudo y la foto p
 
 **Versión publicada en Vercel:** utiliza PostgreSQL de Neon y Vercel Blob privado para las fotos cifradas. Cada actualización del código conserva la base y los documentos. La versión de escritorio local sigue usando SQLite. Ver [DEPLOYMENT.md](DEPLOYMENT.md) para operar la web y realizar respaldos.
 
+**Abrir la web:** https://ascensocedros.vercel.app
+
 ## Iniciar
 
 Requiere **Node.js 24 LTS**. Usa SQLite incorporado en Node ([documentación oficial](https://nodejs.org/docs/latest-v24.x/api/sqlite.html)) y Sharp para validar y procesar fotos.

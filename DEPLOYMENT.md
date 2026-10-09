@@ -4,6 +4,10 @@ Repositorio: https://github.com/fedemarr/ASCENSOCEDROS
 
 Equipo Vercel: `fmcodes-projects`. Proyecto: `ascensocedros`.
 
+Web pública: https://ascensocedros.vercel.app
+
+Paneles: https://ascensocedros.vercel.app/admin y https://ascensocedros.vercel.app/seguridad. Ambos requieren iniciar sesión.
+
 ## Datos persistentes
 
 - **Neon PostgreSQL**, recurso `ascensocedros-db`, plan `free_v3`, región São Paulo (`gru1`): cuentas, sesiones, invitadores, cupos, invitados, ingresos y auditoría.
@@ -53,6 +57,10 @@ vercel --prod --scope fmcodes-projects
 ```
 
 `vercel.json` define explícitamente la función Node de producción. El código local SQLite no se usa como servidor de Vercel. Los archivos `data`, `.env*`, `.vercel` y los resultados de pruebas quedan excluidos del repositorio y/o del despliegue.
+
+El proyecto está conectado al repositorio: un `git push` a `main` dispara una actualización automática de producción. Revisar las comprobaciones de GitHub antes de enviar cambios.
+
+Para verificar los servicios reales con un registro temporal, ejecutar `node --env-file=.env.cloud.local scripts/smoke-cloud.mjs https://ascensocedros.vercel.app`. Utiliza las claves iniciales del archivo local, por lo que no debe usarse después de rotarlas sin actualizar ese archivo. El script elimina únicamente sus propios datos y fotos de prueba al finalizar.
 
 Para probar localmente la base de la nube: `npm run start:cloud`, disponible en `http://localhost:3001`. Esa vista utiliza los datos reales de la web: las acciones modifican esa base.
 

@@ -24,6 +24,7 @@ const icon = (name, cls = '') => `<svg class="icon ${cls}" width="20" height="20
 const brand = () => `<a class="brand" href="/"><img src="/assets/escudo.png" alt="Escudo de Los Cedros"><span>LOS CEDROS<small>RUGBY CLUB · NIGHT</small></span></a>`;
 const dateLabel = (event) => event.date ? new Intl.DateTimeFormat('es-AR', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Buenos_Aires' }).format(new Date(`${event.date}T12:00:00-03:00`)) : 'Fecha a confirmar';
 const timeLabel = (time) => time ? new Intl.DateTimeFormat('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: 'America/Buenos_Aires' }).format(new Date(time)) : '';
+const doorTime = (time) => { const [hour, minute] = time.split(':'); const h = Number(hour); return `${String(h % 12 || 12).padStart(2, '0')}:${minute} ${h >= 12 ? 'PM' : 'AM'}`; };
 const state = { user: null, event: null, view: 'inviters', q: '', filter: 'all', inviter: '', page: 1, inviters: [], guests: [], stats: {}, stream: null, connected: false };
 let searchTimer; let listSequence = 0; let refreshSequence = 0; let toastTimer;
 async function api(path, options = {}) {
@@ -52,7 +53,7 @@ async function submitting(form, action) {
   finally { if (button.isConnected) { button.disabled = false; button.innerHTML = text; } }
 }
 function eventDetails(event) {
-  return `<div class="event-details"><span>${icon('calendar')} ${esc(dateLabel(event))}</span><span>${icon('clock')} ${esc(event.time ? `${event.time} H` : 'Horario a confirmar')}</span><span>${icon('location')} ${esc(event.location)}</span></div>`;
+  return `<div class="event-details"><span>${icon('calendar')} ${esc(dateLabel(event))}</span><span>${icon('clock')} ${esc(event.time ? `OPEN DOORS · ${doorTime(event.time)}` : 'Horario a confirmar')}</span><span>${icon('location')} ${esc(event.location)}</span></div>`;
 }
 async function prepareDocumentPhoto(file) {
   // Keep the original 5 MB upload choice, but fit the request below Vercel's body limit.
@@ -268,7 +269,7 @@ async function downloadFlyer(event) {
   const canvas = document.createElement('canvas'); canvas.width = 1080; canvas.height = 1440; const ctx = canvas.getContext('2d');
   const scale = Math.max(1080 / photo.width, 1440 / photo.height); ctx.drawImage(photo, (1080-photo.width*scale)/2, (1440-photo.height*scale)/2,photo.width*scale,photo.height*scale);
   const shade = ctx.createLinearGradient(0,0,0,1440); shade.addColorStop(0,'rgba(4,16,35,.45)'); shade.addColorStop(.45,'rgba(4,16,35,.73)'); shade.addColorStop(1,'rgba(4,16,35,.98)'); ctx.fillStyle = shade; ctx.fillRect(0,0,1080,1440);
-  ctx.fillStyle = '#f4dc36'; ctx.fillRect(0,0,1080,12); ctx.drawImage(logo,858,65,135,135);
+  ctx.fillStyle = '#f4dc36'; ctx.fillRect(0,0,1080,12); ctx.drawImage(logo,778,42,240,240 * logo.height / logo.width);
   ctx.fillStyle = '#fff'; ctx.font = 'bold 22px Arial'; ctx.fillText('EL CLUB. LOS AMIGOS. LA NOCHE.',75,113);
   ctx.fillStyle = '#f4dc36'; ctx.font = 'bold 24px Arial'; ctx.fillText('NOS VEMOS EN CASA',75,425);
   const words = event.title.trim().split(/\s+/); const last = words.pop();
@@ -277,7 +278,7 @@ async function downloadFlyer(event) {
   ctx.fillStyle = '#fff'; ctx.font = '30px Arial';
   const wrap = (text, y, maxWidth = 920, lineHeight = 43) => { let line = ''; for (const word of text.split(/\s+/)) { const candidate = `${line}${word} `; if (ctx.measureText(candidate).width > maxWidth && line) { ctx.fillText(line.trim(),75,y); y += lineHeight; line = `${word} `; } else line = candidate; } ctx.fillText(line.trim(),75,y); return y + lineHeight; };
   wrap(event.subtitle,790); ctx.fillStyle = '#f4dc36'; ctx.fillRect(75,900,930,2);
-  ctx.font = 'bold 32px Arial'; ctx.fillStyle = '#fff'; ctx.fillText(dateLabel(event).toUpperCase(),75,978); ctx.fillText(event.time ? `${event.time} H` : 'HORARIO A CONFIRMAR',75,1038);
+  ctx.font = 'bold 32px Arial'; ctx.fillStyle = '#fff'; ctx.fillText(dateLabel(event).toUpperCase(),75,978); ctx.fillText(event.time ? `OPEN DOORS · ${doorTime(event.time)}` : 'HORARIO A CONFIRMAR',75,1038);
   ctx.font = '28px Arial'; wrap(event.location,1100);
   ctx.fillStyle = '#f4dc36'; ctx.font = 'bold 25px Arial'; ctx.fillText('AZUL Y AMARILLO. SIEMPRE.',75,1340); ctx.fillStyle = '#fff'; ctx.font = 'bold 20px Arial'; ctx.fillText('LOS CEDROS / NIGHT',745,1340);
   const blob = await new Promise((resolve) => canvas.toBlob(resolve,'image/png')); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'los-cedros-night-flyer.png'; a.click(); setTimeout(() => URL.revokeObjectURL(url),1000);

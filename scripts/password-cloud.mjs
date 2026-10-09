@@ -1,0 +1,17 @@
+import { randomBytes } from 'node:crypto';
+import { mkdirSync,writeFileSync } from 'node:fs';
+import { join,dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { cloudDatabase } from '../cloud/database.mjs';
+import { hashPassword } from '../cloud/security.mjs';
+const username=process.argv[2];
+if (!['admin','seguridad'].includes(username)) throw new Error('Uso: npm run password:cloud -- admin (o seguridad)');
+const db=cloudDatabase();
+const [user]=await db.query('SELECT id FROM users WHERE username=$1',[username]);
+if (!user) throw new Error('Usuario no encontrado.');
+const password=randomBytes(18).toString('base64url');
+await db.transaction([['UPDATE users SET password=$1 WHERE id=$2',[hashPassword(password),user.id]],['DELETE FROM sessions WHERE user_id=$1',[user.id]]]);
+const dir=join(dirname(dirname(fileURLToPath(import.meta.url))),'data');
+mkdirSync(dir,{ recursive:true,mode:0o700 });
+writeFileSync(join(dir,`nuevo-acceso-cloud-${username}.txt`),`Usuario: ${username}\nContraseña: ${password}\n`,{ mode:0o600 });
+console.log(`Clave de la web actualizada. Leer data/nuevo-acceso-cloud-${username}.txt en privado.`);

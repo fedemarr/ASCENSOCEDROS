@@ -1,0 +1,10 @@
+data/
+.env*
+test/
+test-results/
+playwright-report/
+.agents/
+skills-lock.json
+node_modules/
+flyer/
+.git/

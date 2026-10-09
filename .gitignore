@@ -1,0 +1,13 @@
+node_modules/
+data/
+.env
+test-results/
+playwright-report/
+*.log
+
+.vercel
+.env*
+!.env.example
+.agents/
+skills-lock.json
+dist/

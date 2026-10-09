@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "regions": ["gru1"],
+  "builds": [
+    { "src": "api/index.mjs", "use": "@vercel/node", "config": { "includeFiles": ["public/**"], "maxDuration": 60 } }
+  ],
+  "routes": [
+    { "src": "/(.*)", "dest": "/api/index.mjs" }
+  ]
+}

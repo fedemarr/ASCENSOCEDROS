@@ -1,0 +1,31 @@
+{
+  "name": "los-cedros-night",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Invitaciones y control de ingreso de Los Cedros Night",
+  "engines": {
+    "node": ">=24.0.0 <25"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node --watch server.mjs",
+    "test": "node --test test/*.test.mjs",
+    "check": "node --check server.mjs && node --check public/app.js && node --check cloud/handler.mjs && node --check cloud/schema.mjs && node --check api/index.mjs",
+    "password": "node scripts/password.mjs",
+    "test:ui": "playwright test",
+    "start:cloud": "node --env-file=.env.cloud.local cloud/preview.mjs",
+    "migrate:cloud": "node --env-file=.env.cloud.local scripts/migrate-cloud.mjs",
+    "backup:cloud": "node --env-file=.env.cloud.local scripts/backup-cloud.mjs",
+    "password:cloud": "node --env-file=.env.cloud.local scripts/password-cloud.mjs"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.2.0",
+    "@vercel/blob": "^2.8.1",
+    "sharp": "^0.35.5"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@playwright/test": "^1.64.0"
+  }
+}

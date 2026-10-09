@@ -70,7 +70,7 @@ async function prepareDocumentPhoto(file) {
 }
 function flyer(event, compact = false) {
   const words = event.title.trim().split(/\s+/); const last = words.pop();
-  return `<div class="flyer ${compact ? 'compact' : ''}" id="flyer"><div class="flyer-photo"></div><div class="flyer-shade"></div><div class="flyer-top"><span class="eyebrow">EL CLUB. LOS AMIGOS. LA NOCHE.</span><img src="/assets/escudo.png" alt="Los Cedros Rugby Club"></div><div class="flyer-body"><span class="flyer-kicker">NOS VEMOS EN CASA</span><h1>${esc(words.join(' '))}<br><em>${esc(last)}</em><span class="title-dot">.</span></h1><p>${esc(event.subtitle)}</p><div class="flyer-rule"></div>${eventDetails(event)}</div><div class="flyer-bottom"><span>AZUL Y AMARILLO.<br>SIEMPRE.</span><span class="flyer-number">LC<span> / NIGHT</span></span></div></div>`;
+  return `<div class="flyer ${compact ? 'compact' : ''}" id="flyer"><div class="flyer-photo"></div><div class="flyer-shade"></div><div class="flyer-top"><span class="eyebrow">EL CLUB. LOS AMIGOS. LA NOCHE.</span><img src="/assets/escudo.png" alt="Los Cedros Rugby Club"></div><div class="flyer-body"><span class="flyer-kicker">NOS VEMOS EN CASA</span><h1>${esc(words.join(' '))}<br><em>${esc(last)}</em><span class="title-dot">.</span></h1><p>${esc(event.subtitle)}</p><div class="flyer-rule"></div>${eventDetails(event)}</div><div class="flyer-bottom"><span>CEDRENSE SIEMPRE</span><span class="flyer-number">LC<span> / NIGHT</span></span></div></div>`;
 }
 async function renderLanding() {
   document.title = 'Los Cedros Night · El club. Los amigos. La noche.';
@@ -280,7 +280,7 @@ async function downloadFlyer(event) {
   wrap(event.subtitle,790); ctx.fillStyle = '#f4dc36'; ctx.fillRect(75,900,930,2);
   ctx.font = 'bold 32px Arial'; ctx.fillStyle = '#fff'; ctx.fillText(dateLabel(event).toUpperCase(),75,978); ctx.fillText(event.time ? `OPEN DOORS · ${doorTime(event.time)}` : 'HORARIO A CONFIRMAR',75,1038);
   ctx.font = '28px Arial'; wrap(event.location,1100);
-  ctx.fillStyle = '#f4dc36'; ctx.font = 'bold 25px Arial'; ctx.fillText('AZUL Y AMARILLO. SIEMPRE.',75,1340); ctx.fillStyle = '#fff'; ctx.font = 'bold 20px Arial'; ctx.fillText('LOS CEDROS / NIGHT',745,1340);
+  ctx.fillStyle = '#f4dc36'; ctx.font = 'bold 25px Arial'; ctx.fillText('CEDRENSE SIEMPRE',75,1340); ctx.fillStyle = '#fff'; ctx.font = 'bold 20px Arial'; ctx.fillText('LOS CEDROS / NIGHT',745,1340);
   const blob = await new Promise((resolve) => canvas.toBlob(resolve,'image/png')); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'los-cedros-night-flyer.png'; a.click(); setTimeout(() => URL.revokeObjectURL(url),1000);
 }
 async function boot() {

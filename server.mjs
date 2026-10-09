@@ -1,10 +1,9 @@
 import http from 'node:http';
 import { DatabaseSync } from 'node:sqlite';
-import { randomBytes, randomUUID, scryptSync, timingSafeEqual, createHash, createCipheriv, createDecipheriv } from 'node:crypto';
+import { randomBytes, randomUUID, scryptSync, timingSafeEqual, createHash } from 'node:crypto';
 import { mkdirSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import sharp from 'sharp';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 if (existsSync(join(ROOT, '.env'))) process.loadEnvFile(join(ROOT, '.env'));
@@ -63,21 +62,8 @@ export function createApplication(options = {}) {
   `);
   const keyFile = join(dataDir, 'photo.key');
   if (!existsSync(keyFile)) writeFileSync(keyFile, randomBytes(32), { mode: 0o600, flag: 'wx' });
-  const photoKey = readFileSync(keyFile);
-  const encryptPhoto = (bytes) => {
-    const iv = randomBytes(12);
-    const cipher = createCipheriv('aes-256-gcm', photoKey, iv);
-    const encrypted = Buffer.concat([cipher.update(bytes), cipher.final()]);
-    return Buffer.concat([iv, cipher.getAuthTag(), encrypted]);
-  };
-  const decryptPhoto = (blob) => {
-    const bytes = Buffer.from(blob);
-    const decipher = createDecipheriv('aes-256-gcm', photoKey, bytes.subarray(0, 12));
-    decipher.setAuthTag(bytes.subarray(12, 28));
-    return Buffer.concat([decipher.update(bytes.subarray(28)), decipher.final()]);
-  };
   const defaults = { title: 'LOS CEDROS NIGHT', subtitle: 'Una noche para encontrarnos.', date: '', time: '', location: 'Los Cedros Rugby Club', description: 'Los colores de siempre. Una noche distinta. Sumate a compartir música, amigos y toda la energía del club.' };
-  for (const [key, value] of Object.entries(defaults)) db.prepare('INSERT OR IGNORE INTO settings(key,value) VALUES (?,?)').run(key, value);
+  for (const [key, value] of Object.entries({...defaults,_registration_capacity:'10000',_registration_active:'1'})) db.prepare('INSERT OR IGNORE INTO settings(key,value) VALUES (?,?)').run(key, value);
   if (!db.prepare('SELECT id FROM users LIMIT 1').get()) {
     const credentials = [];
     for (const [username, role] of [['admin', 'admin'], ['seguridad', 'security']]) {
@@ -91,7 +77,7 @@ export function createApplication(options = {}) {
   const rateLimits = new Map();
   const now = () => new Date().toISOString();
   const audit = (user, action, target) => db.prepare('INSERT INTO audit(user_id,action,target_id,created_at) VALUES (?,?,?,?)').run(user?.id || null, action, target, now());
-  const getSettings = () => Object.fromEntries(db.prepare('SELECT key,value FROM settings').all().map((s) => [s.key, s.value]));
+  const getSettings = () => Object.fromEntries(db.prepare('SELECT key,value FROM settings').all().filter(s=>!s.key.startsWith('_')).map((s) => [s.key, s.value]));
   const session = (req) => {
     const token = /(?:^|;\s*)lc_session=([a-zA-Z0-9_-]+)/.exec(req.headers.cookie || '')?.[1];
     if (!token) return null;
@@ -118,18 +104,16 @@ export function createApplication(options = {}) {
   };
   const readBody = async (req) => {
     if (!String(req.headers['content-type'] || '').startsWith('application/json')) fail(415, 'Formato de solicitud inválido.');
-    if (Number(req.headers['content-length']) > 8_000_000) fail(413, 'La foto debe pesar menos de 5 MB.');
+    if (Number(req.headers['content-length']) > 16000) fail(413, 'La solicitud es demasiado grande.');
     let size = 0; const chunks = [];
-    for await (const chunk of req) { size += chunk.length; if (size > 8_000_000) fail(413, 'La foto debe pesar menos de 5 MB.'); chunks.push(chunk); }
+    for await (const chunk of req) { size += chunk.length; if (size > 16000) fail(413, 'La solicitud es demasiado grande.'); chunks.push(chunk); }
     try { const body = JSON.parse(Buffer.concat(chunks).toString()); if (!body || typeof body !== 'object' || Array.isArray(body)) fail(400, 'Datos inválidos.'); return body; }
     catch { fail(400, 'Datos inválidos.'); }
   };
-  const publicInviter = (slug, token) => {
-    if (!token || token.length > 64) fail(404, 'Este link de invitación no es válido.');
-    const inviter = db.prepare('SELECT * FROM inviters WHERE token=? AND slug=?').get(token, slug);
-    if (!inviter) fail(404, 'Este link de invitación no es válido.');
-    if (!inviter.active) fail(410, 'Esta invitación fue revocada. Contactá a quien te invitó.');
-    return inviter;
+  const registration = () => {
+    const capacity=Number(db.prepare("SELECT value FROM settings WHERE key='_registration_capacity'").get().value);
+    const active=db.prepare("SELECT value FROM settings WHERE key='_registration_active'").get().value==='1';
+    return {capacity,active,available:Math.max(0,capacity-db.prepare('SELECT COUNT(*) AS n FROM guests').get().n),event:getSettings()};
   };
   const inviterStats = () => db.prepare(`SELECT i.*, COUNT(g.id) AS registered,
     COALESCE(SUM(CASE WHEN g.entered_at IS NOT NULL THEN 1 ELSE 0 END),0) AS entered,
@@ -208,46 +192,36 @@ export function createApplication(options = {}) {
         res.setHeader('Set-Cookie', 'lc_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0');
         broadcast(); return json(res, 200, { ok: true });
       }
-      const invitation = /^\/api\/invitation\/([^/]+)$/.exec(path);
-      if (invitation && method === 'GET') {
-        limiter(req, 'invitation', 150);
-        const inviter = publicInviter(invitation[1], url.searchParams.get('token'));
-        const count = db.prepare('SELECT COUNT(*) AS n FROM guests WHERE inviter_id=?').get(inviter.id).n;
-        return json(res, 200, { name: inviter.name, available: Math.max(0, inviter.capacity - count), event: getSettings() });
+      if (path.startsWith('/api/invitation/')) fail(410,'Usá el link general /invitacion para registrarte.');
+      if (path === '/api/registration' && method === 'GET') { limiter(req,'invitation',150); return json(res,200,registration()); }
+      if (path === '/api/registration' && method === 'PATCH') {
+        const user=requireUser(req,'admin'); const body=await readBody(req);
+        if (!Number.isInteger(body.capacity) || body.capacity<0 || body.capacity>10000 || typeof body.active!=='boolean') fail(400,'Cupo o estado inválido.');
+        if (body.capacity<db.prepare('SELECT COUNT(*) AS n FROM guests').get().n) fail(400,'El cupo no puede ser menor a los registrados.');
+        db.exec('BEGIN IMMEDIATE');
+        try { db.prepare("UPDATE settings SET value=? WHERE key='_registration_capacity'").run(String(body.capacity)); db.prepare("UPDATE settings SET value=? WHERE key='_registration_active'").run(body.active ? '1':'0'); audit(user,'registration_updated','event'); db.exec('COMMIT'); }
+        catch(e) { db.exec('ROLLBACK'); throw e; }
+        broadcast(); return json(res,200,registration());
       }
-      if (invitation && method === 'POST') {
-        limiter(req, 'register', 25, 10 * 60_000);
-        const inviter = publicInviter(invitation[1], url.searchParams.get('token'));
-        const body = await readBody(req);
-        const firstName = textField(body.first_name, 'Nombre');
-        const lastName = textField(body.last_name, 'Apellido');
-        const dni = String(body.dni || '').replace(/[.\s]/g, '');
-        if (!/^\d{7,8}$/.test(dni)) fail(400, 'Ingresá un DNI válido de 7 u 8 números.');
-        if (body.consent !== true) fail(400, 'Aceptá el uso de tus datos para el control de ingreso.');
-        if (typeof body.photo !== 'string' || !/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(body.photo)) fail(400, 'Subí una foto del DNI en formato JPG, PNG o WebP.');
-        const bytes = Buffer.from(body.photo.slice(body.photo.indexOf(',') + 1), 'base64');
-        if (bytes.length > 5_000_000) fail(413, 'La foto debe pesar menos de 5 MB.');
-        let photo;
-        try {
-          const image = sharp(bytes, { limitInputPixels: 25_000_000, animated: false });
-          const metadata = await image.metadata();
-          if (!['jpeg', 'png', 'webp'].includes(metadata.format) || (metadata.pages || 1) > 1) fail(400, 'Imagen inválida.');
-          photo = await image.rotate().resize({ width: 1600, height: 1600, fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 85 }).toBuffer();
-        } catch { fail(400, 'No pudimos leer la foto. Subí una imagen JPG, PNG o WebP válida.'); }
-        const id = randomUUID();
+      if (path === '/api/registration' && method === 'POST') {
+        limiter(req,'register',25,600000); const body=await readBody(req);
+        const firstName=textField(body.first_name,'Nombre'); const lastName=textField(body.last_name,'Apellido');
+        const inviterName=textField(body.inviter_name,'Nombre de quien te invita'); const dni=String(body.dni || '').replace(/[.\s]/g,'');
+        if (!/^\d{7,8}$/.test(dni)) fail(400,'Ingresá un DNI válido de 7 u 8 números.');
+        if (body.consent!==true) fail(400,'Aceptá el uso de tus datos para el control de ingreso.');
+        const id=randomUUID(); let inviter;
         db.exec('BEGIN IMMEDIATE');
         try {
-          // Revalidar dentro de la transacción después de procesar la imagen.
-          const current = publicInviter(invitation[1], url.searchParams.get('token'));
-          if (db.prepare('SELECT id FROM guests WHERE dni=?').get(dni)) fail(409, 'Este DNI ya está registrado para el evento.');
-          const count = db.prepare('SELECT COUNT(*) AS n FROM guests WHERE inviter_id=?').get(current.id).n;
-          if (count >= current.capacity) fail(409, 'Este invitador ya completó su cupo. Contactalo para consultar.');
-          db.prepare('INSERT INTO guests(id,inviter_id,first_name,last_name,dni,search_name,photo,created_at) VALUES (?,?,?,?,?,?,?,?)').run(id, current.id, firstName, lastName, dni, normalize(`${firstName} ${lastName}`), encryptPhoto(photo), now());
-          audit(null, 'registered', id);
-          db.exec('COMMIT');
-        } catch (error) { db.exec('ROLLBACK'); throw error; }
-        broadcast();
-        return json(res, 201, { ok: true, first_name: firstName, last_name: lastName, inviter_name: inviter.name });
+          const config=registration(); if (!config.active) fail(410,'El registro está cerrado.');
+          if (db.prepare('SELECT id FROM guests WHERE dni=?').get(dni)) fail(409,'Este DNI ya está registrado para el evento.');
+          if (!config.available) fail(409,'El cupo del evento está completo.');
+          inviter=db.prepare('SELECT * FROM inviters ORDER BY created_at,id').all().find(i=>normalize(i.name)===normalize(inviterName));
+          if (inviter && !inviter.active) fail(403,'Acceso revocado. Consultá a administración.');
+          if (!inviter) { inviter={id:randomUUID(),name:inviterName}; db.prepare('INSERT INTO inviters VALUES(?,?,?,?,?,1,?)').run(inviter.id,inviter.name,'shared-'+inviter.id,randomBytes(32).toString('base64url'),10000,now()); }
+          db.prepare('INSERT INTO guests(id,inviter_id,first_name,last_name,dni,search_name,photo,created_at) VALUES(?,?,?,?,?,?,?,?)').run(id,inviter.id,firstName,lastName,dni,normalize(firstName+' '+lastName),Buffer.alloc(0),now());
+          audit(null,'registered',id); db.exec('COMMIT');
+        } catch(e) { db.exec('ROLLBACK'); throw e; }
+        broadcast(); return json(res,201,{ok:true,first_name:firstName,last_name:lastName,inviter_name:inviter.name});
       }
       if (path === '/api/events' && method === 'GET') {
         const user = requireUser(req);
@@ -263,19 +237,14 @@ export function createApplication(options = {}) {
           FROM guests g JOIN inviters i ON g.inviter_id=i.id`).get();
         const available = db.prepare(`SELECT COALESCE(SUM(MAX(0,capacity-(SELECT COUNT(*) FROM guests g WHERE g.inviter_id=i.id))),0) AS n FROM inviters i WHERE active=1`).get().n;
         const pending = db.prepare('SELECT COUNT(*) AS n FROM guests g JOIN inviters i ON i.id=g.inviter_id WHERE g.entered_at IS NULL AND g.revoked=0 AND i.active=1').get().n;
-        return json(res, 200, { ...totals, available, pending, inviters: db.prepare('SELECT COUNT(*) AS n FROM inviters').get().n });
+        return json(res, 200, { ...totals, available: registration().active ? registration().available : 0, pending, inviters: db.prepare('SELECT COUNT(*) AS n FROM inviters').get().n });
       }
       if (path === '/api/guests' && method === 'GET') { requireUser(req); return json(res, 200, guestsQuery(url)); }
-      const guestRoute = /^\/api\/guests\/([a-f0-9-]+)\/(photo|enter|revoke)$/.exec(path);
+      const guestRoute = /^\/api\/guests\/([a-f0-9-]+)\/(enter|revoke)$/.exec(path);
       if (guestRoute) {
         const user = requireUser(req, guestRoute[2] === 'revoke' ? 'admin' : undefined);
         const guest = db.prepare('SELECT g.*,i.active AS inviter_active FROM guests g JOIN inviters i ON i.id=g.inviter_id WHERE g.id=?').get(guestRoute[1]);
         if (!guest) fail(404, 'Invitado no encontrado.');
-        if (guestRoute[2] === 'photo' && method === 'GET') {
-          audit(user, 'photo_viewed', guest.id);
-          res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Content-Disposition': 'inline; filename="documento.jpg"' });
-          return res.end(decryptPhoto(guest.photo));
-        }
         if (guestRoute[2] === 'enter' && method === 'POST') {
           if (guest.revoked || !guest.inviter_active) fail(403, 'Acceso revocado. Consultá a administración.');
           const timestamp = now();
@@ -292,26 +261,16 @@ export function createApplication(options = {}) {
         }
       }
       if (path === '/api/inviters' && method === 'GET') { requireUser(req, 'admin'); return json(res, 200, { inviters: inviterStats() }); }
-      if (path === '/api/inviters' && method === 'POST') {
-        const user = requireUser(req, 'admin');
-        const body = await readBody(req);
-        const name = textField(body.name, 'Nombre del invitador');
-        if (!Number.isInteger(body.capacity) || body.capacity < 1 || body.capacity > 10_000) fail(400, 'El cupo debe ser entre 1 y 10.000.');
-        const id = randomUUID();
-        const slug = normalize(name).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'invitador';
-        db.prepare('INSERT INTO inviters VALUES (?,?,?,?,?,1,?)').run(id, name, slug, randomBytes(32).toString('base64url'), body.capacity, now());
-        audit(user, 'inviter_created', id); broadcast();
-        return json(res, 201, { inviter: inviterStats().find((i) => i.id === id) });
-      }
       const inviterRoute = /^\/api\/inviters\/([a-f0-9-]+)$/.exec(path);
       if (inviterRoute && method === 'PATCH') {
         const user = requireUser(req, 'admin');
         const body = await readBody(req);
+        if (body.capacity!==undefined || body.rotate!==undefined) fail(400,'Solo se permite cambiar el estado de acceso.');
         const inviter = db.prepare('SELECT * FROM inviters WHERE id=?').get(inviterRoute[1]);
         if (!inviter) fail(404, 'Invitador no encontrado.');
         const count = db.prepare('SELECT COUNT(*) AS n FROM guests WHERE inviter_id=?').get(inviter.id).n;
         const capacity = body.capacity ?? inviter.capacity;
-        if (!Number.isInteger(capacity) || capacity < count || capacity < 0 || capacity > 10_000) fail(400, `El cupo debe ser entre ${count} y 10.000; no puede ser menor a los registrados.`);
+        if (!Number.isInteger(capacity) || (body.capacity !== undefined && capacity < count) || capacity < 0 || capacity > 10_000) fail(400, `El cupo debe ser entre ${count} y 10.000; no puede ser menor a los registrados.`);
         if (body.active !== undefined && typeof body.active !== 'boolean') fail(400, 'Estado inválido.');
         if (body.rotate !== undefined && typeof body.rotate !== 'boolean') fail(400, 'Acción inválida.');
         const active = body.active === undefined ? inviter.active : Number(body.active);
@@ -347,7 +306,7 @@ export function createApplication(options = {}) {
         '/assets/club.jpeg': ['assets/club.jpeg', 'image/jpeg']
       };
       const asset = assets[path];
-      if (!asset && !['/', '/admin', '/seguridad', '/login'].includes(path) && !/^\/invitacion\/[^/]+$/.test(path)) fail(404, 'Página no encontrada.');
+      if (!asset && !['/', '/invitacion', '/admin', '/seguridad', '/login'].includes(path) && !/^\/invitacion\/[^/]+$/.test(path)) fail(404, 'Página no encontrada.');
       const file = join(ROOT, 'public', asset?.[0] || 'index.html');
       res.writeHead(200, { 'Content-Type': asset?.[1] || 'text/html; charset=utf-8' });
       return res.end(method === 'HEAD' ? undefined : readFileSync(file));

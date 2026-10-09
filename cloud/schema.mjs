@@ -24,6 +24,41 @@ export const schemaStatements = [
     target_id TEXT NOT NULL, created_at TEXT NOT NULL
   )`,
   `CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
+  `INSERT INTO settings(key,value) VALUES('_registration_capacity','10000'),('_registration_active','1') ON CONFLICT DO NOTHING`,
+  `CREATE OR REPLACE FUNCTION update_shared_registration(p_capacity INTEGER,p_active BOOLEAN,p_user TEXT,p_time TEXT)
+    RETURNS VOID LANGUAGE plpgsql AS $$
+    BEGIN
+      PERFORM value FROM settings WHERE key='_registration_capacity' FOR UPDATE;
+      IF p_capacity<(SELECT COUNT(*) FROM guests) THEN RAISE EXCEPTION 'CAPACITY_TOO_SMALL'; END IF;
+      UPDATE settings SET value=p_capacity::text WHERE key='_registration_capacity';
+      UPDATE settings SET value=CASE WHEN p_active THEN '1' ELSE '0' END WHERE key='_registration_active';
+      INSERT INTO audit(user_id,action,target_id,created_at) VALUES(p_user,'registration_updated','event',p_time);
+      UPDATE changes SET version=version+1 WHERE id=1;
+    END
+  $$`,
+  `CREATE OR REPLACE FUNCTION register_shared_guest(
+    p_id TEXT,p_inviter TEXT,p_inviter_key TEXT,p_first TEXT,p_last TEXT,p_dni TEXT,p_search TEXT,p_created TEXT
+  ) RETURNS TEXT LANGUAGE plpgsql AS $$
+    DECLARE inv inviters%ROWTYPE; capacity INTEGER;
+    BEGIN
+      SELECT value::int INTO capacity FROM settings WHERE key='_registration_capacity' FOR UPDATE;
+      IF (SELECT value FROM settings WHERE key='_registration_active')<>'1' THEN RAISE EXCEPTION 'REGISTRATION_CLOSED'; END IF;
+      IF EXISTS(SELECT 1 FROM guests WHERE dni=p_dni) THEN RAISE EXCEPTION 'DUPLICATE_DNI'; END IF;
+      IF (SELECT COUNT(*) FROM guests)>=capacity THEN RAISE EXCEPTION 'FULL'; END IF;
+      SELECT * INTO inv FROM inviters WHERE lower(trim(translate(name,'ÁÉÍÓÚÜÑáéíóúüñ','AEIOUUNaeiouun')))=p_inviter_key ORDER BY created_at,id LIMIT 1 FOR UPDATE;
+      IF FOUND THEN
+        IF inv.active=0 THEN RAISE EXCEPTION 'REVOKED'; END IF;
+      ELSE
+        INSERT INTO inviters(id,name,slug,token,capacity,active,created_at)
+          VALUES(p_id,p_inviter,'shared-'||p_id,p_id,10000,1,p_created) RETURNING * INTO inv;
+      END IF;
+      INSERT INTO guests(id,inviter_id,first_name,last_name,dni,search_name,photo_path,created_at)
+        VALUES(p_id,inv.id,p_first,p_last,p_dni,p_search,'',p_created);
+      INSERT INTO audit(action,target_id,created_at) VALUES('registered',p_id,p_created);
+      UPDATE changes SET version=version+1 WHERE id=1;
+      RETURN inv.name;
+    END
+  $$`,
   `CREATE TABLE IF NOT EXISTS changes (id INTEGER PRIMARY KEY CHECK(id=1), version BIGINT NOT NULL DEFAULT 0)`,
   `INSERT INTO changes(id,version) VALUES (1,0) ON CONFLICT DO NOTHING`,
   `CREATE TABLE IF NOT EXISTS rate_limits (key TEXT PRIMARY KEY, count INTEGER NOT NULL, until BIGINT NOT NULL)`,
@@ -68,7 +103,7 @@ export const schemaStatements = [
       SELECT * INTO inv FROM inviters WHERE id=p_id FOR UPDATE;
       IF NOT FOUND THEN RAISE EXCEPTION 'NOT_FOUND'; END IF;
       new_capacity=COALESCE(p_capacity,inv.capacity);
-      IF new_capacity<(SELECT COUNT(*) FROM guests WHERE inviter_id=p_id) THEN RAISE EXCEPTION 'CAPACITY_TOO_SMALL'; END IF;
+      IF p_capacity IS NOT NULL AND new_capacity<(SELECT COUNT(*) FROM guests WHERE inviter_id=p_id) THEN RAISE EXCEPTION 'CAPACITY_TOO_SMALL'; END IF;
       UPDATE inviters SET capacity=new_capacity,active=COALESCE(p_active,inv.active),
         token=CASE WHEN p_rotate THEN p_token ELSE inv.token END WHERE id=p_id;
       INSERT INTO audit(user_id,action,target_id,created_at) VALUES(p_user,

@@ -11,13 +11,13 @@ Paneles: https://ascensocedros.vercel.app/admin y https://ascensocedros.vercel.a
 ## Datos persistentes
 
 - **Neon PostgreSQL**, recurso `ascensocedros-db`, plan `free_v3`, región São Paulo (`gru1`): cuentas, sesiones, invitadores, cupos, invitados, ingresos y auditoría.
-- **Vercel Blob privado**, `ascensocedros-dni`, región `gru1`: fotos normalizadas a JPG y cifradas con AES-256-GCM antes de subirlas. Las URLs de almacenamiento no son públicas. El servidor exige sesión y permisos para entregar la foto.
+- **Vercel Blob privado**, `ascensocedros-dni`, región `gru1`: documentos cifrados anteriores. No se suben fotos nuevas ni se sirven desde la aplicación.
 - La clave `PHOTO_KEY` se almacena como variable privada de Vercel. Nunca subirla a Git ni cambiarla al redeployar. Copiarla junto con la base y las fotos al hacer un respaldo.
 - Una nueva versión de Vercel modifica el código, conserva los recursos de almacenamiento y no recrea usuarios ni bases. Si falta la configuración, el servicio falla sin crear una base temporal.
 
-Las altas y los cambios de cupo bloquean la fila del invitador en PostgreSQL. El DNI es único a nivel base. El ingreso usa una operación atómica y conserva una sola hora aunque se marque desde dos dispositivos. Cada cambio incrementa una revisión compartida, que las conexiones SSE consultan cada segundo; el ingreso también refresca inmediatamente el dispositivo que lo marcó.
+Las altas y los cambios de cupo bloquean la configuración del cupo global en PostgreSQL. El DNI es único a nivel base. El ingreso usa una operación atómica y conserva una sola hora aunque se marque desde dos dispositivos. Cada cambio incrementa una revisión compartida, que las conexiones SSE consultan cada segundo; el ingreso también refresca inmediatamente el dispositivo que lo marcó.
 
-Las fotos seleccionadas pueden pesar hasta 5 MB. El navegador las optimiza antes de enviarlas para respetar el límite de cuerpo de las funciones de Vercel, y el servidor las valida y normaliza de nuevo.
+Registro compartido: `/invitacion`. Solo requiere nombre, apellido, número de DNI y nombre declarado de quien invita, con aviso +18. Los nuevos registros no requieren Blob ni PHOTO_KEY.
 
 ## Accesos
 
@@ -67,3 +67,7 @@ Para probar localmente la base de la nube: `npm run start:cloud`, disponible en 
 `npm run migrate:cloud` importa los datos locales sin borrar los registros de destino y comprueba que la clave de cifrado coincida. No sobrescribe cupos, personas o configuración ya presentes. Se usa para la migración inicial; las actualizaciones habituales del código no requieren ejecutarlo.
 
 El plan gratuito de Neon y los recursos de Vercel tienen límites de uso. No eliminar los recursos ni el proyecto mientras deban conservarse los registros. Consultar el panel de almacenamiento para revisar consumo y mantener las copias independientes.
+
+## Actualizar el registro compartido
+
+`node --env-file=.env.cloud.local scripts/update-registration.mjs --apply` valida las funciones nuevas sobre una copia aislada de los datos actuales y después las instala sin eliminar registros. Crear primero un respaldo. No importar de nuevo la base local para actualizar las funciones.

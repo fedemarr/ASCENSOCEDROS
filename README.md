@@ -2,13 +2,13 @@
 
 Sistema completo de invitaciones y control de ingreso, con el escudo y la foto proporcionados para la invitación y el flyer. Interfaz en español, adaptable a celulares, azul, amarillo, negro y blanco.
 
-**Versión publicada en Vercel:** utiliza PostgreSQL de Neon y Vercel Blob privado para las fotos cifradas. Cada actualización del código conserva la base y los documentos. La versión de escritorio local sigue usando SQLite. Ver [DEPLOYMENT.md](DEPLOYMENT.md) para operar la web y realizar respaldos.
+**Versión publicada en Vercel:** utiliza PostgreSQL de Neon; Vercel Blob conserva los documentos cifrados anteriores. Cada actualización del código conserva la base y los documentos. La versión de escritorio local sigue usando SQLite. Ver [DEPLOYMENT.md](DEPLOYMENT.md) para operar la web y realizar respaldos.
 
 **Abrir la web:** https://ascensocedros.vercel.app
 
 ## Iniciar
 
-Requiere **Node.js 24 LTS**. Usa SQLite incorporado en Node ([documentación oficial](https://nodejs.org/docs/latest-v24.x/api/sqlite.html)) y Sharp para validar y procesar fotos.
+Requiere **Node.js 24 LTS**. Usa SQLite incorporado en Node ([documentación oficial](https://nodejs.org/docs/latest-v24.x/api/sqlite.html)).
 
 ```powershell
 npm install
@@ -24,13 +24,12 @@ No se precargan personas ni documentos reales o de ejemplo en la base de uso nor
 
 ## Flujo
 
-1. Entrar en `/admin` y crear un invitador con nombre y cupo.
-2. Copiar el link o compartirlo con el botón de WhatsApp. Su formato es `/invitacion/nombre-apellido?token=...`, con UUID interno y token aleatorio de 256 bits. Compartir el **link completo**, incluido el token.
-3. El invitado ve quién lo invita y completa nombre, apellido, DNI y foto. El servidor asigna el invitador desde el token, ignorando cualquier invitador enviado por el cliente.
-4. Seguridad entra en `/seguridad` y busca por nombre, apellido o DNI. La búsqueda admite acentos y nombres completos. Las personas con el mismo nombre se distinguen por DNI.
-5. Abrir la foto para verificar la identidad y marcar **INGRESÓ**. La hora queda guardada y se actualiza por SSE en los demás dispositivos. Un ingreso simultáneo solo se registra una vez.
+1. Compartir **https://ascensocedros.vercel.app/invitacion**, el mismo link para todos.
+2. El invitado completa nombre, apellido, número de DNI y nombre de quien lo invita. No se solicita ni se guarda una foto nueva del DNI. El evento mantiene el aviso **+18**.
+3. Administración puede copiar el link, ajustar el cupo total y abrir o cerrar el registro. Los invitadores aparecen automáticamente, agrupados por nombre sin distinguir mayúsculas ni acentos. Sus nombres son declarados por los invitados.
+4. Seguridad busca por nombre, apellido o DNI, consulta el detalle y marca **INGRESÓ**. El ingreso se sincroniza entre dispositivos y conserva una sola hora.
 
-El DNI es único para todo el evento. Los cupos se validan en una transacción de escritura y no pueden excederse por solicitudes simultáneas. Los invitados revocados conservan su registro y su cupo; para sumar otras personas se puede aumentar el cupo. Revocar un invitador bloquea nuevos registros y el ingreso de todos sus invitados. La revocación individual bloquea a una persona. Reactivar un invitador no elimina revocaciones individuales. Renovar el token invalida el link anterior y mantiene a sus registrados.
+El DNI es único para todo el evento. El cupo global se valida en una transacción y no puede excederse con solicitudes simultáneas. Cerrar el registro no bloquea el ingreso de los ya registrados. Revocar un invitador bloquea nuevos registros a su nombre y el ingreso de sus invitados; la revocación individual bloquea una persona. Los registros anteriores se conservan. Las antiguas rutas personales abren el formulario general y ya no asignan un invitador por token.
 
 ## Flyer
 
@@ -40,12 +39,11 @@ También queda un flyer listo en `flyer/los-cedros-night.png`. La versión actua
 
 ## Protección de datos y sesiones
 
-- Fotos cifradas con AES-256-GCM en SQLite, fuera de `public`. Solo se sirven a usuarios autenticados de administración o seguridad, con `Cache-Control: no-store`. Cada consulta queda en auditoría.
-- El servidor decodifica las imágenes, limita su tamaño y resolución, elimina metadatos y las normaliza a JPG. No admite SVG ni documentos ejecutables.
+- El formulario solicita solamente el número de DNI, sin foto. Las fotos anteriores se conservan en el almacenamiento privado para no eliminar datos; ya no hay una ruta para consultarlas desde la aplicación.
 - Contraseñas con scrypt, cookies HttpOnly y SameSite, sesiones de 12 horas, permisos por rol y protección de solicitudes de escritura. Límite de intentos de inicio de sesión y registro.
 - Búsqueda con consultas parametrizadas, resultados de 50 personas por página y protección contra respuestas atrasadas mientras se escribe.
 - No hay generación ni lectura de códigos QR. El ingreso es manual por lista.
-- Se conserva un registro de altas, cambios de cupo, revocaciones, consultas de foto e ingresos en la tabla `audit`.
+- Se conserva un registro de altas, cambios de cupo, revocaciones e ingresos en la tabla `audit`.
 
 Para rotar una contraseña y cerrar todas las sesiones de esa cuenta:
 
@@ -62,7 +60,7 @@ El servidor escucha en `0.0.0.0`. Para probar en celulares de la misma Wi-Fi, us
 
 Para enlaces de WhatsApp accesibles fuera de esa red hay que alojar el servidor con un **dominio HTTPS**, almacenamiento persistente y respaldo. Configurar `.env` a partir de `.env.example`: `PUBLIC_URL=https://tu-dominio` y `SECURE_COOKIES=true` detrás del proxy HTTPS. El proxy debe permitir SSE sin buffering en `/api/events`. No exponer el puerto HTTP directo si el servicio usa HTTPS.
 
-`npm start` inicia la versión local sobre SQLite. En Vercel, `api/index.mjs` usa exclusivamente PostgreSQL y Blob privado: nunca intenta guardar datos en el disco temporal de una función. Las instancias de Vercel consultan una revisión compartida para sincronizar los dispositivos. Las conexiones SSE se renuevan automáticamente.
+`npm start` inicia la versión local sobre SQLite. En Vercel, `api/index.mjs` usa exclusivamente PostgreSQL para los registros nuevos: nunca intenta guardar datos en el disco temporal de una función. Las instancias de Vercel consultan una revisión compartida para sincronizar los dispositivos. Las conexiones SSE se renuevan automáticamente.
 
 Respaldar la carpeta privada `data` con el servidor detenido (base y clave de cifrado juntas). Si se pierde `photo.key`, las fotos no podrán recuperarse. Restringir permisos de la carpeta al usuario del servicio y no publicarla ni subirla a Git. Definir con el club cuándo eliminar los datos tras el evento. La revocación no borra documentos.
 
@@ -74,4 +72,4 @@ npm test
 npm run test:ui
 ```
 
-Las pruebas de sistema usan bases temporales de SQLite y PostgreSQL (PGlite) y verifican permisos, DNI único, cupos simultáneos, cifrado, ingreso único, SSE, revocación, rotación y persistencia. También verifican la sincronización y los límites de solicitudes entre dos instancias independientes. La prueba visual usa Microsoft Edge instalado y revisa el flujo completo en escritorio y dos celulares, incluido el flyer descargable. Las capturas quedan en `test-results`, sin datos reales.
+Las pruebas de sistema usan bases temporales de SQLite y PostgreSQL (PGlite), con registros anteriores, y verifican el link general, registro sin foto, nombres de invitadores, DNI único, cupo global, cierre del registro, ingreso único, SSE, revocaciones y persistencia. La prueba visual usa Microsoft Edge y recorre administración, formulario y seguridad desde dos celulares. Las capturas quedan en `test-results`, sin datos reales.

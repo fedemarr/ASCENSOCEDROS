@@ -18,9 +18,10 @@ mkdirSync(join(dir,'photos'),{ recursive:true,mode:0o700 });
 writeFileSync(join(dir,'photo.key'),key,{ mode:0o600 });
 writeFileSync(join(dir,'database.json'),JSON.stringify({ format:'los-cedros-night-cloud-v1',created_at:new Date().toISOString(),...data },null,2),{ mode:0o600 });
 for (const guest of data.guests) {
+  if (!guest.photo_path) continue;
   const result=await get(guest.photo_path,{ access:'private',useCache:false });
   if (!result || result.statusCode!==200) throw new Error('No se pudo descargar una foto. El respaldo está incompleto.');
   writeFileSync(join(dir,'photos',`${guest.id}.bin`),Buffer.from(await new Response(result.stream).arrayBuffer()),{ mode:0o600 });
 }
-writeFileSync(join(dir,'COMPLETE.txt'),`Respaldo completo. ${data.guests.length} invitados con sus fotos cifradas. Guardar esta carpeta de forma privada.\n`,{ mode:0o600 });
+writeFileSync(join(dir,'COMPLETE.txt'),`Respaldo completo. ${data.guests.length} invitados y las fotos cifradas que existan. Guardar esta carpeta de forma privada.\n`,{ mode:0o600 });
 console.log(`Respaldo completo: ${dir}. Incluye base, fotos y clave. No publicarlo.`);

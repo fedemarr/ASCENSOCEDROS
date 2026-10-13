@@ -71,4 +71,18 @@ export function registrationContract(label, context) {
     assert.equal((await admin('/api/settings',{date:'2026-10-17',time:'01:00'})).status,200);
     assert.equal((await req('/api/event')).data.time,'01:00');
   });
+  test(label+': filtro por invitador parcial, acentos y combinación con DNI y estado',async()=>{
+    const filtered=async(name,extra='')=>(await req('/api/guests?inviter_name='+encodeURIComponent(name)+extra,{cookie:context().admin})).data;
+    assert.equal((await filtered('JU PE')).total,4);
+    assert.equal((await filtered('perez juan')).total,4);
+    assert.equal((await filtered('mart lo')).total,1);
+    assert.equal((await filtered('MARTÍN LÓPEZ')).total,1);
+    assert.equal((await filtered('ju pe','&q=40123456&state=entered')).total,1);
+    assert.equal((await filtered('mart','&q=40123456')).total,0);
+    assert.equal((await filtered('%')).total,0);
+    assert.equal((await filtered("' OR 1=1--")).total,0);
+    const g=(await guests('60123456')).data.guests[0];
+    assert.equal((await filtered('ju','&inviter='+g.inviter_id)).total,0);
+    assert.equal((await filtered('')).total,5);
+  });
 }

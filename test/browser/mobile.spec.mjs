@@ -50,6 +50,17 @@ test('flyer, registro, administración y dos celulares sincronizados', async ({ 
   await a.getByRole('button',{ name:'Cerrar',exact:true }).click();
   await a.screenshot({ path:'test-results/security-mobile.png',fullPage:true });
   await admin.getByRole('button',{ name:'Invitados',exact:true }).click();
+  await admin.getByRole('searchbox',{name:'Buscar por quién invitó'}).fill('ju pe');
+  await expect(admin.locator('#guest-count')).toHaveText('1 invitado');
+  await admin.getByRole('searchbox',{name:'Buscar por quién invitó'}).fill('otra persona');
+  await expect(admin.locator('#guest-count')).toHaveText('0 invitados');
+  await admin.getByRole('searchbox',{name:'Buscar por quién invitó'}).fill('');
+  await expect(admin.locator('#guest-count')).toHaveText('1 invitado');
+  await admin.getByLabel('Filtrar por invitador').selectOption({label:'Juan Pérez'});
+  await expect(admin.getByRole('button',{name:'Lucía Gómez',exact:true})).toBeVisible();
+  await admin.setViewportSize({width:390,height:844}); await noOverflow(admin);
+  await admin.screenshot({path:'test-results/inviter-filter-mobile.png',fullPage:true});
+  await admin.setViewportSize({width:1440,height:1000});
   await admin.getByRole('button',{ name:'Lucía Gómez',exact:true }).click();
   const guestId = await admin.locator('#guest-detail').getAttribute('data-id');
   await admin.request.post(`${base}/api/guests/${guestId}/revoke`,{ headers:{ 'X-Requested-With':'LosCedros' },data:{ revoked:true } });

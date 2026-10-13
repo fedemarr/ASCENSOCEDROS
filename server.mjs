@@ -132,6 +132,12 @@ export function createApplication(options = {}) {
     });
     const inviter = url.searchParams.get('inviter');
     if (inviter) { clauses.push('g.inviter_id=?'); params.push(inviter); }
+    const inviterParts=normalize(url.searchParams.get('inviter_name') || '').slice(0,100).split(/\s+/).filter(Boolean).slice(0,8);
+    if (inviterParts.length) {
+      const ids=db.prepare('SELECT id,name FROM inviters').all().filter(i=>inviterParts.every(part=>normalize(i.name).includes(part))).map(i=>i.id);
+      clauses.push(ids.length ? 'g.inviter_id IN ('+ids.map(()=>'?').join(',')+')' : '0=1');
+      params.push(...ids);
+    }
     const state = url.searchParams.get('state');
     if (state === 'entered') clauses.push('g.entered_at IS NOT NULL');
     if (state === 'pending') clauses.push('g.entered_at IS NULL AND g.revoked=0 AND i.active=1');

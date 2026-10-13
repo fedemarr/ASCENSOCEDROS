@@ -61,6 +61,10 @@ export function createCloudHandler(options={}) {
       clauses.push(`(g.search_name LIKE $${params.length} ESCAPE '\\' OR g.dni LIKE $${params.length} ESCAPE '\\')`);
     }
     const inviter=url.searchParams.get('inviter'); if (inviter) { params.push(inviter); clauses.push(`g.inviter_id=$${params.length}`); }
+    for(const part of normalize(url.searchParams.get('inviter_name') || '').slice(0,100).split(/\s+/).filter(Boolean).slice(0,8)) {
+      params.push('%'+part.replace(/[\\%_]/g,'\\$&')+'%');
+      clauses.push(`lower(translate(i.name,'ÁÉÍÓÚÜÑáéíóúüñ','AEIOUUNaeiouun')) LIKE $${params.length} ESCAPE '\\'`);
+    }
     const state=url.searchParams.get('state');
     if (state==='entered') clauses.push('g.entered_at IS NOT NULL');
     if (state==='pending') clauses.push('g.entered_at IS NULL AND g.revoked=0 AND i.active=1');

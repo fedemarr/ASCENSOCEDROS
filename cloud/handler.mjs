@@ -71,10 +71,12 @@ export function createCloudHandler(options={}) {
     if (state==='revoked') clauses.push('(g.revoked=1 OR i.active=0)');
     const where=clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
     const page=Math.max(1,Math.min(100000,Math.floor(Number(url.searchParams.get('page')) || 1)));
+    const sort=url.searchParams.get('sort');
+    const order=sort==='newest' ? 'g.created_at DESC,g.id DESC' : sort==='name' ? 'g.last_name,g.first_name,g.dni' : 'g.created_at ASC,g.id ASC';
     const [count,guests]=await Promise.all([
       one(`SELECT COUNT(*)::int AS n FROM guests g JOIN inviters i ON i.id=g.inviter_id ${where}`,params),
       q(`SELECT g.id,g.inviter_id,g.first_name,g.last_name,g.dni,g.created_at,g.entered_at,g.revoked,i.name AS inviter_name,i.active AS inviter_active
-      FROM guests g JOIN inviters i ON i.id=g.inviter_id ${where} ORDER BY g.last_name,g.first_name,g.dni LIMIT 50 OFFSET $${params.length+1}`,[...params,(page-1)*50])
+      FROM guests g JOIN inviters i ON i.id=g.inviter_id ${where} ORDER BY ${order} LIMIT 50 OFFSET $${params.length+1}`,[...params,(page-1)*50])
     ]);
     return { guests,total:count.n,page,pages:Math.ceil(count.n/50) };
   };

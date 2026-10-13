@@ -18,3 +18,5 @@
 @media(max-width:760px){.shared-registration{padding:0 18px 20px}.inviter-metric strong{font-size:18px}}
 .inviter-filter-controls{display:flex;gap:12px;flex:1;min-width:0}.inviter-name-search{flex:1;min-width:180px}.guest-toolbar .guest-search{min-width:220px}.guest-toolbar{flex-wrap:wrap}.inviter-name-search input{font-size:13px}.inviter-filter-controls select{align-self:center}
 @media(max-width:760px){.inviter-filter-controls{flex-direction:column;width:100%}.inviter-name-search{min-width:0;width:100%}.guest-toolbar .guest-search{min-width:0}}
+.guest-sort-label{font-size:11px;gap:5px;min-width:0}.guest-toolbar .guest-sort-label select{width:245px;font-size:12px;max-width:100%}
+@media(max-width:760px){.guest-toolbar .guest-sort-label select{width:100%}.guest-sort-label{width:100%}}

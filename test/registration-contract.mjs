@@ -85,4 +85,14 @@ export function registrationContract(label, context) {
     assert.equal((await filtered('ju','&inviter='+g.inviter_id)).total,0);
     assert.equal((await filtered('')).total,5);
   });
+  test(label+': orden de inscripción estable y compatible con filtros',async()=>{
+    const list=async sort=>(await req('/api/guests?sort='+encodeURIComponent(sort),{cookie:context().admin})).data.guests;
+    const oldest=await list('oldest');
+    const expected=[...oldest].sort((a,b)=>a.created_at.localeCompare(b.created_at)||a.id.localeCompare(b.id));
+    assert.deepEqual(oldest.map(g=>g.id),expected.map(g=>g.id));
+    assert.deepEqual((await list('newest')).map(g=>g.id),oldest.map(g=>g.id).reverse());
+    assert.deepEqual((await list('invalid; DROP TABLE guests')).map(g=>g.id),oldest.map(g=>g.id));
+    const filtered=(await req('/api/guests?sort=newest&inviter_name=ju%20pe',{cookie:context().admin})).data.guests;
+    assert.deepEqual(filtered.map(g=>g.id),[...oldest].reverse().filter(g=>g.inviter_name==='Juan Pérez').map(g=>g.id));
+  });
 }

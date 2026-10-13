@@ -144,9 +144,11 @@ export function createApplication(options = {}) {
     if (state === 'revoked') clauses.push('(g.revoked=1 OR i.active=0)');
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
     const page = Math.max(1, Math.min(100_000, Number(url.searchParams.get('page')) || 1));
+    const sort=url.searchParams.get('sort');
+    const order=sort==='newest' ? 'g.created_at DESC,g.id DESC' : sort==='name' ? 'g.last_name COLLATE NOCASE,g.first_name COLLATE NOCASE,g.dni' : 'g.created_at ASC,g.id ASC';
     const total = db.prepare(`SELECT COUNT(*) AS n FROM guests g JOIN inviters i ON i.id=g.inviter_id ${where}`).get(...params).n;
     const guests = db.prepare(`SELECT g.id,g.inviter_id,g.first_name,g.last_name,g.dni,g.created_at,g.entered_at,g.revoked,i.name AS inviter_name,i.active AS inviter_active
-      FROM guests g JOIN inviters i ON i.id=g.inviter_id ${where} ORDER BY g.last_name COLLATE NOCASE,g.first_name COLLATE NOCASE,g.dni LIMIT 50 OFFSET ?`).all(...params, (page - 1) * 50);
+      FROM guests g JOIN inviters i ON i.id=g.inviter_id ${where} ORDER BY ${order} LIMIT 50 OFFSET ?`).all(...params, (page - 1) * 50);
     return { guests, total, page, pages: Math.ceil(total / 50) };
   };
   const securityHeaders = (res) => {

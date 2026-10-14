@@ -29,9 +29,11 @@ test('flyer, registro, administración y dos celulares sincronizados', async ({ 
   await guest.screenshot({ path:'test-results/invitation-mobile.png',fullPage:true });
   await guest.getByLabel('Nombre',{ exact:true }).fill('Lucía'); await guest.getByLabel('Apellido',{ exact:true }).fill('Gómez'); await guest.getByLabel('DNI',{ exact:true }).fill('40123456');
   await guest.getByLabel('¿Quién te invita?').fill('Juan Pérez');
-  await guest.getByLabel('Género (opcional)').selectOption('female');
+  await expect(guest.locator('[name=gender]')).toHaveCount(0);
   await guest.getByRole('checkbox').check(); await guest.getByRole('button',{ name:'Confirmar mi invitación' }).click();
   await expect(guest.getByText('YA ESTÁS EN LA LISTA',{ exact:true })).toBeVisible();
+  const registered=(await (await admin.request.get(`${base}/api/guests?q=40123456`)).json()).guests[0];
+  await admin.request.post(`${base}/api/guests/${registered.id}/gender`,{headers:{'X-Requested-With':'LosCedros'},data:{gender:'female'}});
   await expect(admin.getByRole('button',{name:'Juan Pérez',exact:true})).toBeVisible();
   const phoneA = await browser.newContext({ viewport:{ width:390,height:844 } }); const phoneB = await browser.newContext({ viewport:{ width:360,height:800 } });
   const a = await phoneA.newPage(); const b = await phoneB.newPage();

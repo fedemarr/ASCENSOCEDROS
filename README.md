@@ -35,6 +35,8 @@ El DNI es único para todo el evento. El cupo global se valida en una transacci�
 
 En **Invitados**, el selector **Ordenar por** muestra primero a quienes se anotaron antes, permite invertir el orden o elegir apellido y nombre. Se combina con la búsqueda, el invitador y el estado, y se mantiene al pasar de página.
 
+El filtro **Género** permite ver Mujeres, Hombres, Otro o Sin dato. El registro incluye un campo opcional y administración puede actualizarlo desde el detalle del invitado cuando la persona lo confirme. Los registros anteriores quedan Sin dato. **Composición de invitados** muestra cantidades y porcentajes sobre todos los registrados del evento, incluidos los revocados y quienes no indicaron el dato; no cambia al filtrar la lista. Los porcentajes usan un decimal y pueden sumar 99,9% o 100,1% por redondeo.
+
 En **Evento y flyer**, editar título, frase, fecha, hora, lugar y descripción. La fecha y hora no se inventan: hasta configurarlas aparecen “a confirmar”. Descargar el flyer PNG de **1080 × 1440** para compartir. Los archivos originales utilizados están en `public/assets`.
 
 También queda un flyer listo en `flyer/los-cedros-night.png`. La versión actual incluye el logo oficial, la fecha 17/10/2026 y Open doors 01:00 AM.

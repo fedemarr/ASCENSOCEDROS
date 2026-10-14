@@ -18,6 +18,7 @@ export const schemaStatements = [
     revoked INTEGER NOT NULL DEFAULT 0 CHECK(revoked IN (0,1))
   )`,
   `CREATE INDEX IF NOT EXISTS guests_inviter ON guests(inviter_id)`,
+  `ALTER TABLE guests ADD COLUMN IF NOT EXISTS gender TEXT NOT NULL DEFAULT 'unknown' CHECK(gender IN ('female','male','other','unknown'))`,
   `CREATE INDEX IF NOT EXISTS guests_search ON guests(search_name)`,
   `CREATE TABLE IF NOT EXISTS audit (
     id BIGSERIAL PRIMARY KEY, user_id TEXT REFERENCES users(id), action TEXT NOT NULL,
@@ -62,6 +63,16 @@ export const schemaStatements = [
   `CREATE TABLE IF NOT EXISTS changes (id INTEGER PRIMARY KEY CHECK(id=1), version BIGINT NOT NULL DEFAULT 0)`,
   `INSERT INTO changes(id,version) VALUES (1,0) ON CONFLICT DO NOTHING`,
   `CREATE TABLE IF NOT EXISTS rate_limits (key TEXT PRIMARY KEY, count INTEGER NOT NULL, until BIGINT NOT NULL)`,
+  `CREATE OR REPLACE FUNCTION register_shared_guest_gender(
+    p_id TEXT,p_inviter TEXT,p_inviter_key TEXT,p_first TEXT,p_last TEXT,p_dni TEXT,p_search TEXT,p_created TEXT,p_gender TEXT
+  ) RETURNS TEXT LANGUAGE plpgsql AS $$
+    DECLARE inviter_name TEXT;
+    BEGIN
+      inviter_name := register_shared_guest(p_id,p_inviter,p_inviter_key,p_first,p_last,p_dni,p_search,p_created);
+      UPDATE guests SET gender=p_gender WHERE id=p_id;
+      RETURN inviter_name;
+    END
+  $$`,
   `CREATE OR REPLACE FUNCTION register_guest(
     p_id TEXT, p_slug TEXT, p_token TEXT, p_first TEXT, p_last TEXT,
     p_dni TEXT, p_search TEXT, p_photo TEXT, p_created TEXT

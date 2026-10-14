@@ -1,3 +1,4 @@
+import {genders,genderStats} from './demographics.mjs';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -65,6 +66,7 @@ export function createCloudHandler(options={}) {
       params.push('%'+part.replace(/[\\%_]/g,'\\$&')+'%');
       clauses.push(`lower(translate(i.name,'ÁÉÍÓÚÜÑáéíóúüñ','AEIOUUNaeiouun')) LIKE $${params.length} ESCAPE '\\'`);
     }
+    const gender=url.searchParams.get('gender'); if (gender) { if (!genders.includes(gender)) fail(400,'Filtro de género inválido.'); params.push(gender); clauses.push(`g.gender=$${params.length}`); }
     const state=url.searchParams.get('state');
     if (state==='entered') clauses.push('g.entered_at IS NOT NULL');
     if (state==='pending') clauses.push('g.entered_at IS NULL AND g.revoked=0 AND i.active=1');
@@ -75,7 +77,7 @@ export function createCloudHandler(options={}) {
     const order=sort==='newest' ? 'g.created_at DESC,g.id DESC' : sort==='name' ? 'g.last_name,g.first_name,g.dni' : 'g.created_at ASC,g.id ASC';
     const [count,guests]=await Promise.all([
       one(`SELECT COUNT(*)::int AS n FROM guests g JOIN inviters i ON i.id=g.inviter_id ${where}`,params),
-      q(`SELECT g.id,g.inviter_id,g.first_name,g.last_name,g.dni,g.created_at,g.entered_at,g.revoked,i.name AS inviter_name,i.active AS inviter_active
+      q(`SELECT g.id,g.inviter_id,g.first_name,g.last_name,g.dni,g.gender,g.created_at,g.entered_at,g.revoked,i.name AS inviter_name,i.active AS inviter_active
       FROM guests g JOIN inviters i ON i.id=g.inviter_id ${where} ORDER BY ${order} LIMIT 50 OFFSET $${params.length+1}`,[...params,(page-1)*50])
     ]);
     return { guests,total:count.n,page,pages:Math.ceil(count.n/50) };
@@ -136,7 +138,8 @@ export function createCloudHandler(options={}) {
         const inviter=textField(body.inviter_name,'Nombre de quien te invita'); const dni=String(body.dni || '').replace(/[.\s]/g,'');
         if (!/^\d{7,8}$/.test(dni)) fail(400,'Ingresá un DNI válido de 7 u 8 números.');
         if (body.consent!==true) fail(400,'Aceptá el uso de tus datos para el control de ingreso.');
-        const result=await one('SELECT register_shared_guest($1,$2,$3,$4,$5,$6,$7,$8) AS inviter_name',[randomUUID(),inviter,normalize(inviter),first,last,dni,normalize(first+' '+last),now()]);
+        const gender=body.gender ?? 'unknown'; if (!genders.includes(gender)) fail(400,'Género inválido.');
+        const result=await one('SELECT register_shared_guest_gender($1,$2,$3,$4,$5,$6,$7,$8,$9) AS inviter_name',[randomUUID(),inviter,normalize(inviter),first,last,dni,normalize(first+' '+last),now(),gender]);
         return json(res,201,{ok:true,first_name:first,last_name:last,inviter_name:result.inviter_name});
       }
       if (path==='/api/events' && method==='GET') return await stream(req,res,await requireUser(req));
@@ -148,14 +151,15 @@ export function createCloudHandler(options={}) {
             COUNT(*) FILTER(WHERE g.entered_at IS NULL AND g.revoked=0 AND i.active=1)::int AS pending
             FROM guests g JOIN inviters i ON i.id=g.inviter_id`),
           one(`SELECT COUNT(*)::int AS inviters,COALESCE(SUM(CASE WHEN active=1 THEN GREATEST(0,capacity-(SELECT COUNT(*) FROM guests g WHERE g.inviter_id=i.id)) ELSE 0 END),0)::int AS available FROM inviters i`)
-        ]); return json(res,200,{ ...totals,...other,available:(await registration()).active ? (await registration()).available : 0 });
+        ]); return json(res,200,{ ...totals,...other,demographics:genderStats(await q('SELECT gender,COUNT(*)::int AS count FROM guests GROUP BY gender')),available:(await registration()).active ? (await registration()).available : 0 });
       }
       if (path==='/api/guests' && method==='GET') { await requireUser(req); return json(res,200,await guestsQuery(url)); }
-      const guestRoute=/^\/api\/guests\/([a-f0-9-]+)\/(enter|revoke)$/.exec(path);
+      const guestRoute=/^\/api\/guests\/([a-f0-9-]+)\/(enter|revoke|gender)$/.exec(path);
       if (guestRoute) {
-        const user=await requireUser(req,guestRoute[2]==='revoke' ? 'admin' : undefined);
+        const user=await requireUser(req,['revoke','gender'].includes(guestRoute[2]) ? 'admin' : undefined);
         if (guestRoute[2]==='enter' && method==='POST') { const result=await one('SELECT * FROM enter_guest($1,$2,$3)',[guestRoute[1],user.id,now()]); return json(res,200,{ ok:true,...result }); }
         const guest=await one('SELECT g.*,i.active AS inviter_active FROM guests g JOIN inviters i ON i.id=g.inviter_id WHERE g.id=$1',[guestRoute[1]]); if (!guest) fail(404,'Invitado no encontrado.');
+        if (guestRoute[2]==='gender' && method==='POST') {const body=await readBody(req);if (!genders.includes(body.gender)) fail(400,'Género inválido.');await mutate([['UPDATE guests SET gender=$1 WHERE id=$2',[body.gender,guest.id]]],user,'gender_updated',guest.id);return json(res,200,{ok:true,gender:body.gender});}
         if (guestRoute[2]==='revoke' && method==='POST') { const body=await readBody(req); if (typeof body.revoked!=='boolean') fail(400,'Estado inválido.'); await mutate([['UPDATE guests SET revoked=$1 WHERE id=$2',[Number(body.revoked),guest.id]]],user,body.revoked ? 'guest_revoked' : 'guest_restored',guest.id); return json(res,200,{ ok:true }); }
       }
       if (path==='/api/inviters' && method==='GET') { await requireUser(req,'admin'); return json(res,200,{ inviters:await inviterStats() }); }

@@ -1,3 +1,4 @@
+import {genders,genderStats} from './cloud/demographics.mjs';
 import http from 'node:http';
 import { DatabaseSync } from 'node:sqlite';
 import { randomBytes, randomUUID, scryptSync, timingSafeEqual, createHash } from 'node:crypto';
@@ -60,6 +61,7 @@ export function createApplication(options = {}) {
     );
     CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
   `);
+  if (!db.prepare('PRAGMA table_info(guests)').all().some(column=>column.name==='gender')) db.exec("ALTER TABLE guests ADD COLUMN gender TEXT NOT NULL DEFAULT 'unknown' CHECK(gender IN ('female','male','other','unknown'))");
   const keyFile = join(dataDir, 'photo.key');
   if (!existsSync(keyFile)) writeFileSync(keyFile, randomBytes(32), { mode: 0o600, flag: 'wx' });
   const defaults = { title: 'LOS CEDROS NIGHT', subtitle: 'Una noche para encontrarnos.', date: '', time: '', location: 'Los Cedros Rugby Club', description: 'Los colores de siempre. Una noche distinta. Sumate a compartir música, amigos y toda la energía del club.' };
@@ -138,6 +140,7 @@ export function createApplication(options = {}) {
       clauses.push(ids.length ? 'g.inviter_id IN ('+ids.map(()=>'?').join(',')+')' : '0=1');
       params.push(...ids);
     }
+    const gender=url.searchParams.get('gender'); if (gender) { if (!genders.includes(gender)) fail(400,'Filtro de género inválido.'); clauses.push('g.gender=?'); params.push(gender); }
     const state = url.searchParams.get('state');
     if (state === 'entered') clauses.push('g.entered_at IS NOT NULL');
     if (state === 'pending') clauses.push('g.entered_at IS NULL AND g.revoked=0 AND i.active=1');
@@ -147,7 +150,7 @@ export function createApplication(options = {}) {
     const sort=url.searchParams.get('sort');
     const order=sort==='newest' ? 'g.created_at DESC,g.id DESC' : sort==='name' ? 'g.last_name COLLATE NOCASE,g.first_name COLLATE NOCASE,g.dni' : 'g.created_at ASC,g.id ASC';
     const total = db.prepare(`SELECT COUNT(*) AS n FROM guests g JOIN inviters i ON i.id=g.inviter_id ${where}`).get(...params).n;
-    const guests = db.prepare(`SELECT g.id,g.inviter_id,g.first_name,g.last_name,g.dni,g.created_at,g.entered_at,g.revoked,i.name AS inviter_name,i.active AS inviter_active
+    const guests = db.prepare(`SELECT g.id,g.inviter_id,g.first_name,g.last_name,g.dni,g.gender,g.created_at,g.entered_at,g.revoked,i.name AS inviter_name,i.active AS inviter_active
       FROM guests g JOIN inviters i ON i.id=g.inviter_id ${where} ORDER BY ${order} LIMIT 50 OFFSET ?`).all(...params, (page - 1) * 50);
     return { guests, total, page, pages: Math.ceil(total / 50) };
   };
@@ -217,6 +220,7 @@ export function createApplication(options = {}) {
         const inviterName=textField(body.inviter_name,'Nombre de quien te invita'); const dni=String(body.dni || '').replace(/[.\s]/g,'');
         if (!/^\d{7,8}$/.test(dni)) fail(400,'Ingresá un DNI válido de 7 u 8 números.');
         if (body.consent!==true) fail(400,'Aceptá el uso de tus datos para el control de ingreso.');
+        const gender=body.gender ?? 'unknown'; if (!genders.includes(gender)) fail(400,'Género inválido.');
         const id=randomUUID(); let inviter;
         db.exec('BEGIN IMMEDIATE');
         try {
@@ -227,6 +231,7 @@ export function createApplication(options = {}) {
           if (inviter && !inviter.active) fail(403,'Acceso revocado. Consultá a administración.');
           if (!inviter) { inviter={id:randomUUID(),name:inviterName}; db.prepare('INSERT INTO inviters VALUES(?,?,?,?,?,1,?)').run(inviter.id,inviter.name,'shared-'+inviter.id,randomBytes(32).toString('base64url'),10000,now()); }
           db.prepare('INSERT INTO guests(id,inviter_id,first_name,last_name,dni,search_name,photo,created_at) VALUES(?,?,?,?,?,?,?,?)').run(id,inviter.id,firstName,lastName,dni,normalize(firstName+' '+lastName),Buffer.alloc(0),now());
+          db.prepare('UPDATE guests SET gender=? WHERE id=?').run(gender,id);
           audit(null,'registered',id); db.exec('COMMIT');
         } catch(e) { db.exec('ROLLBACK'); throw e; }
         broadcast(); return json(res,201,{ok:true,first_name:firstName,last_name:lastName,inviter_name:inviter.name});
@@ -245,14 +250,21 @@ export function createApplication(options = {}) {
           FROM guests g JOIN inviters i ON g.inviter_id=i.id`).get();
         const available = db.prepare(`SELECT COALESCE(SUM(MAX(0,capacity-(SELECT COUNT(*) FROM guests g WHERE g.inviter_id=i.id))),0) AS n FROM inviters i WHERE active=1`).get().n;
         const pending = db.prepare('SELECT COUNT(*) AS n FROM guests g JOIN inviters i ON i.id=g.inviter_id WHERE g.entered_at IS NULL AND g.revoked=0 AND i.active=1').get().n;
-        return json(res, 200, { ...totals, available: registration().active ? registration().available : 0, pending, inviters: db.prepare('SELECT COUNT(*) AS n FROM inviters').get().n });
+        return json(res, 200, { ...totals, demographics: genderStats(db.prepare('SELECT gender,COUNT(*) AS count FROM guests GROUP BY gender').all()), available: registration().active ? registration().available : 0, pending, inviters: db.prepare('SELECT COUNT(*) AS n FROM inviters').get().n });
       }
       if (path === '/api/guests' && method === 'GET') { requireUser(req); return json(res, 200, guestsQuery(url)); }
-      const guestRoute = /^\/api\/guests\/([a-f0-9-]+)\/(enter|revoke)$/.exec(path);
+      const guestRoute = /^\/api\/guests\/([a-f0-9-]+)\/(enter|revoke|gender)$/.exec(path);
       if (guestRoute) {
-        const user = requireUser(req, guestRoute[2] === 'revoke' ? 'admin' : undefined);
+        const user = requireUser(req, ['revoke','gender'].includes(guestRoute[2]) ? 'admin' : undefined);
         const guest = db.prepare('SELECT g.*,i.active AS inviter_active FROM guests g JOIN inviters i ON i.id=g.inviter_id WHERE g.id=?').get(guestRoute[1]);
         if (!guest) fail(404, 'Invitado no encontrado.');
+        if (guestRoute[2] === 'gender' && method === 'POST') {
+          const body=await readBody(req); if (!genders.includes(body.gender)) fail(400,'Género inválido.');
+          db.exec('BEGIN IMMEDIATE');
+          try { db.prepare('UPDATE guests SET gender=? WHERE id=?').run(body.gender,guest.id); audit(user,'gender_updated',guest.id); db.exec('COMMIT'); }
+          catch(error) { db.exec('ROLLBACK'); throw error; }
+          broadcast(); return json(res,200,{ok:true,gender:body.gender});
+        }
         if (guestRoute[2] === 'enter' && method === 'POST') {
           if (guest.revoked || !guest.inviter_active) fail(403, 'Acceso revocado. Consultá a administración.');
           const timestamp = now();

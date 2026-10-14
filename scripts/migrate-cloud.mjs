@@ -26,8 +26,8 @@ let migrated=0;
 for (const g of guests) {
   if ((await db.query('SELECT id FROM guests WHERE id=$1',[g.id])).length) continue;
   const blob=g.photo.length ? await put(`dni/${g.id}.bin`,Buffer.from(g.photo),{ access:'private',contentType:'application/octet-stream',addRandomSuffix:false }) : {pathname:''};
-  await db.query(`INSERT INTO guests(id,inviter_id,first_name,last_name,dni,search_name,photo_path,created_at,entered_at,entered_by,revoked)
-    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,[g.id,g.inviter_id,g.first_name,g.last_name,g.dni,g.search_name,blob.pathname,g.created_at,g.entered_at,g.entered_by,g.revoked]);
+  await db.query(`INSERT INTO guests(id,inviter_id,first_name,last_name,dni,search_name,photo_path,created_at,entered_at,entered_by,revoked,gender)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,[g.id,g.inviter_id,g.first_name,g.last_name,g.dni,g.search_name,blob.pathname,g.created_at,g.entered_at,g.entered_by,g.revoked,g.gender || 'unknown']);
   migrated++;
 }
 await db.transaction(source.prepare('SELECT * FROM settings').all().map((s) => ['INSERT INTO settings VALUES($1,$2) ON CONFLICT(key) DO NOTHING',[s.key,s.value]]));

@@ -95,4 +95,23 @@ export function registrationContract(label, context) {
     const filtered=(await req('/api/guests?sort=newest&inviter_name=ju%20pe',{cookie:context().admin})).data.guests;
     assert.deepEqual(filtered.map(g=>g.id),[...oldest].reverse().filter(g=>g.inviter_name==='Juan Pérez').map(g=>g.id));
   });
+  test(label+': género declarado, edición autorizada, filtros y porcentajes',async()=>{
+    const stats=()=>req('/api/stats',{cookie:context().admin});
+    const original=(await stats()).data.demographics;
+    assert.equal(original.total,5);assert.equal(original.categories.find(c=>c.gender==='unknown').percentage,100);
+    const woman=(await guests('40123456')).data.guests[0];const man=(await guests('60123456')).data.guests[0];
+    const set=(g,gender,cookie=context().admin)=>req('/api/guests/'+g.id+'/gender',{cookie,method:'POST',body:{gender}});
+    assert.equal((await set(woman,'female',context().security)).status,403);
+    assert.equal((await set(woman,'invalid')).status,400);
+    assert.equal((await set(woman,'female')).status,200);
+    assert.equal((await set(man,'male')).status,200);
+    assert.equal((await register('80123456',{gender:'other'})).status,201);
+    assert.equal((await register('80123457',{gender:'invalid'})).status,400);
+    const women=(await req('/api/guests?gender=female&inviter_name=ju%20pe&sort=newest',{cookie:context().admin})).data;
+    assert.equal(women.total,1);assert.equal(women.guests[0].id,woman.id);assert.equal(women.guests[0].entered_at,woman.entered_at);
+    assert.equal((await req('/api/guests?gender=invalid',{cookie:context().admin})).status,400);
+    const d=(await stats()).data.demographics;assert.equal(d.total,6);
+    for(const gender of ['female','male','other']){const c=d.categories.find(c=>c.gender===gender);assert.equal(c.count,1);assert.equal(c.percentage,16.7);}
+    assert.equal(d.categories.find(c=>c.gender==='unknown').count,3);assert.equal(d.categories.find(c=>c.gender==='unknown').percentage,50);
+  });
 }

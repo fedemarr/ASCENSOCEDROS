@@ -29,6 +29,7 @@ test('flyer, registro, administración y dos celulares sincronizados', async ({ 
   await guest.screenshot({ path:'test-results/invitation-mobile.png',fullPage:true });
   await guest.getByLabel('Nombre',{ exact:true }).fill('Lucía'); await guest.getByLabel('Apellido',{ exact:true }).fill('Gómez'); await guest.getByLabel('DNI',{ exact:true }).fill('40123456');
   await guest.getByLabel('¿Quién te invita?').fill('Juan Pérez');
+  await guest.getByLabel('Género (opcional)').selectOption('female');
   await guest.getByRole('checkbox').check(); await guest.getByRole('button',{ name:'Confirmar mi invitación' }).click();
   await expect(guest.getByText('YA ESTÁS EN LA LISTA',{ exact:true })).toBeVisible();
   await expect(admin.getByRole('button',{name:'Juan Pérez',exact:true})).toBeVisible();
@@ -50,6 +51,11 @@ test('flyer, registro, administración y dos celulares sincronizados', async ({ 
   await a.getByRole('button',{ name:'Cerrar',exact:true }).click();
   await a.screenshot({ path:'test-results/security-mobile.png',fullPage:true });
   await admin.getByRole('button',{ name:'Invitados',exact:true }).click();
+  await expect(admin.locator('#demographics')).toContainText('100');
+  await admin.getByLabel('Filtrar por género').selectOption('male');
+  await expect(admin.locator('#guest-count')).toHaveText('0 invitados');
+  await admin.getByLabel('Filtrar por género').selectOption('female');
+  await expect(admin.locator('#guest-count')).toHaveText('1 invitado');
   await expect(admin.getByLabel('Ordenar invitados')).toHaveValue('oldest');
   await admin.getByLabel('Ordenar invitados').selectOption('newest');
   await admin.getByRole('searchbox',{name:'Buscar por quién invitó'}).fill('ju pe');
@@ -66,6 +72,10 @@ test('flyer, registro, administración y dos celulares sincronizados', async ({ 
   await admin.setViewportSize({width:1440,height:1000});
   await admin.getByRole('button',{ name:'Lucía Gómez',exact:true }).click();
   const guestId = await admin.locator('#guest-detail').getAttribute('data-id');
+  await admin.locator('#guest-gender-form select').selectOption('male');
+  await admin.getByRole('button',{name:'Guardar género',exact:true}).click();
+  await expect(admin.locator('#guest-count')).toHaveText('0 invitados');
+  await expect(b.locator('.guest-person')).toContainText('Hombres');
   await admin.request.post(`${base}/api/guests/${guestId}/revoke`,{ headers:{ 'X-Requested-With':'LosCedros' },data:{ revoked:true } });
   await expect(admin.getByRole('button',{ name:'Restaurar acceso individual',exact:true })).toBeVisible();
   await admin.getByRole('button',{ name:'Restaurar acceso individual',exact:true }).click();

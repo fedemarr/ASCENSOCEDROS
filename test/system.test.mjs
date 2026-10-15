@@ -6,6 +6,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createApplication} from '../server.mjs';
 import {registrationContract} from './registration-contract.mjs';
+import {readPdf} from './pdf-utils.mjs';
 let app,base,admin,security,dir;
 const passwords={admin:'Admin-Testing!',seguridad:'Security-Testing!'};
 const request=async(path,o={})=>{const r=await fetch(base+path,{method:o.method || 'GET',headers:{'Content-Type':'application/json','X-Requested-With':'LosCedros',...(o.cookie?{Cookie:o.cookie}:{}),...o.headers},...(o.body?{body:JSON.stringify(o.body)}:{})});return {status:r.status,data:(r.headers.get('content-type') || '').includes('application/json')?await r.json():await r.text(),headers:r.headers};};
@@ -25,6 +26,9 @@ test('SQLite: búsqueda móvil con 10.000 invitados y paginación',async()=>{
     assert.ok(performance.now()-start<250);
     const second=(await request('/api/guests?q=persona&page=2',{cookie:security})).data;
     assert.ok(!second.guests.some(g=>result.guests.some(other=>other.id===g.id)));
+    const pdf=await fetch(base+'/api/guests.pdf?q=800000&page=2',{headers:{Cookie:admin}});
+    assert.equal(pdf.status,200);const text=(await readPdf(await pdf.arrayBuffer())).join(' ');
+    assert.match(text,/100 personas/);for(let n=0;n<100;n++)assert.ok(text.includes(String(80000000+n)));
   } finally {app.db.prepare('DELETE FROM guests WHERE inviter_id=?').run(inviter);app.db.prepare('DELETE FROM inviters WHERE id=?').run(inviter);}
 });
 test('SQLite: persistencia tras reiniciar',async()=>{const before=(await request('/api/stats',{cookie:admin})).data;await app.close();app=createApplication({dataDir:dir,passwords});await new Promise(r=>app.server.listen(0,'127.0.0.1',r));base='http://127.0.0.1:'+app.server.address().port;assert.deepEqual((await request('/api/stats',{cookie:admin})).data,before);});

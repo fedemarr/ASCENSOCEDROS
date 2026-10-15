@@ -1,3 +1,4 @@
+import {createGuestPdf} from './guest-pdf.mjs';
 import {genders,genderStats} from './demographics.mjs';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -54,7 +55,7 @@ export function createCloudHandler(options={}) {
     COUNT(g.id) FILTER(WHERE g.revoked=1)::int AS revoked,
     GREATEST(0,i.capacity-COUNT(g.id))::int AS available
     FROM inviters i LEFT JOIN guests g ON g.inviter_id=i.id GROUP BY i.id ORDER BY i.created_at DESC`);
-  const guestsQuery=async (url) => {
+  const guestsQuery=async (url,exportAll=false) => {
     let query=normalize(url.searchParams.get('q') || '').slice(0,100); if (/^[\d.\s]+$/.test(query)) query=query.replace(/[.\s]/g,'');
     const params=[]; const clauses=[];
     for (const part of query.split(/\s+/).filter(Boolean).slice(0,8)) {
@@ -78,7 +79,7 @@ export function createCloudHandler(options={}) {
     const [count,guests]=await Promise.all([
       one(`SELECT COUNT(*)::int AS n FROM guests g JOIN inviters i ON i.id=g.inviter_id ${where}`,params),
       q(`SELECT g.id,g.inviter_id,g.first_name,g.last_name,g.dni,g.gender,g.created_at,g.entered_at,g.revoked,i.name AS inviter_name,i.active AS inviter_active
-      FROM guests g JOIN inviters i ON i.id=g.inviter_id ${where} ORDER BY ${order} LIMIT 50 OFFSET $${params.length+1}`,[...params,(page-1)*50])
+      FROM guests g JOIN inviters i ON i.id=g.inviter_id ${where} ORDER BY ${order} ${exportAll ? '' : `LIMIT 50 OFFSET $${params.length+1}`}`,exportAll ? params : [...params,(page-1)*50])
     ]);
     return { guests,total:count.n,page,pages:Math.ceil(count.n/50) };
   };
@@ -152,6 +153,13 @@ export function createCloudHandler(options={}) {
             FROM guests g JOIN inviters i ON i.id=g.inviter_id`),
           one(`SELECT COUNT(*)::int AS inviters,COALESCE(SUM(CASE WHEN active=1 THEN GREATEST(0,capacity-(SELECT COUNT(*) FROM guests g WHERE g.inviter_id=i.id)) ELSE 0 END),0)::int AS available FROM inviters i`)
         ]); return json(res,200,{ ...totals,...other,demographics:genderStats(await q('SELECT gender,COUNT(*)::int AS count FROM guests GROUP BY gender')),available:(await registration()).active ? (await registration()).available : 0 });
+      }
+      if (path==='/api/guests.pdf' && method==='GET') {
+        await requireUser(req,'admin');await limiter(req,'pdf-export',20);
+        const [data,event]=await Promise.all([guestsQuery(url,true),settings()]);
+        const inviter=url.searchParams.get('inviter') ? await one('SELECT name FROM inviters WHERE id=$1',[url.searchParams.get('inviter')]) : null;
+        const pdf=await createGuestPdf({guests:data.guests,event,filters:url.searchParams,inviterName:inviter?.name});
+        res.writeHead(200,{'Content-Type':'application/pdf','Content-Disposition':'attachment; filename="los-cedros-lista.pdf"'});return res.end(pdf);
       }
       if (path==='/api/guests' && method==='GET') { await requireUser(req); return json(res,200,await guestsQuery(url)); }
       const guestRoute=/^\/api\/guests\/([a-f0-9-]+)\/(enter|revoke|gender)$/.exec(path);

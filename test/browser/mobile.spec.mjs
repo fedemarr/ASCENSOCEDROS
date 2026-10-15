@@ -70,6 +70,8 @@ test('flyer, registro, administración y dos celulares sincronizados', async ({ 
   await expect(admin.getByRole('button',{name:'Lucía Gómez',exact:true})).toBeVisible();
   await admin.setViewportSize({width:390,height:844}); await noOverflow(admin);
   await expect(admin.getByLabel('Ordenar invitados')).toHaveValue('newest');
+  const pdfDownload=admin.waitForEvent('download');await admin.getByRole('button',{name:'Descargar lista PDF'}).click();
+  const pdf=await pdfDownload;expect(pdf.suggestedFilename()).toBe('los-cedros-lista.pdf');await pdf.saveAs('test-results/lista-mobile.pdf');
   await admin.screenshot({path:'test-results/inviter-filter-mobile.png',fullPage:true});
   await admin.setViewportSize({width:1440,height:1000});
   await admin.getByRole('button',{ name:'Lucía Gómez',exact:true }).click();

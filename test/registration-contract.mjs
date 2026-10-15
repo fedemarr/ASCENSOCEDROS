@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import {readPdf} from './pdf-utils.mjs';
 
 export function registrationContract(label, context) {
   const req=(...args)=>context().request(...args);
@@ -113,5 +114,13 @@ export function registrationContract(label, context) {
     const d=(await stats()).data.demographics;assert.equal(d.total,6);
     for(const gender of ['female','male','other']){const c=d.categories.find(c=>c.gender===gender);assert.equal(c.count,1);assert.equal(c.percentage,16.7);}
     assert.equal(d.categories.find(c=>c.gender==='unknown').count,3);assert.equal(d.categories.find(c=>c.gender==='unknown').percentage,50);
+  });
+  test(label+': PDF privado con filtros y orden independientes de la página visible',async()=>{
+    assert.equal((await req('/api/guests.pdf')).status,401);
+    assert.equal((await req('/api/guests.pdf',{cookie:context().security})).status,403);
+    const response=await fetch(context().otherBase+'/api/guests.pdf?gender=female&sort=newest&page=2',{headers:{Cookie:context().admin}});
+    assert.equal(response.status,200);assert.equal(response.headers.get('content-type'),'application/pdf');assert.match(response.headers.get('content-disposition'),/attachment/);assert.equal(response.headers.get('cache-control'),'no-store');
+    const text=(await readPdf(await response.arrayBuffer())).join(' ');
+    assert.match(text,/40123456/);assert.doesNotMatch(text,/60123456/);assert.match(text,/1 persona/);
   });
 }

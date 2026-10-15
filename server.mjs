@@ -1,3 +1,4 @@
+import {createGuestPdf} from './cloud/guest-pdf.mjs';
 import {genders,genderStats} from './cloud/demographics.mjs';
 import http from 'node:http';
 import { DatabaseSync } from 'node:sqlite';
@@ -122,7 +123,7 @@ export function createApplication(options = {}) {
     COALESCE(SUM(CASE WHEN g.revoked=1 THEN 1 ELSE 0 END),0) AS revoked,
     MAX(0,i.capacity-COUNT(g.id)) AS available
     FROM inviters i LEFT JOIN guests g ON g.inviter_id=i.id GROUP BY i.id ORDER BY i.created_at DESC`).all();
-  const guestsQuery = (url) => {
+  const guestsQuery = (url,exportAll=false) => {
     let query = normalize(url.searchParams.get('q') || '').slice(0, 100);
     if (/^[\d.\s]+$/.test(query)) query = query.replace(/[.\s]/g, '');
     const parts = query.split(/\s+/).filter(Boolean).slice(0, 8);
@@ -151,7 +152,7 @@ export function createApplication(options = {}) {
     const order=sort==='newest' ? 'g.created_at DESC,g.id DESC' : sort==='name' ? 'g.last_name COLLATE NOCASE,g.first_name COLLATE NOCASE,g.dni' : 'g.created_at ASC,g.id ASC';
     const total = db.prepare(`SELECT COUNT(*) AS n FROM guests g JOIN inviters i ON i.id=g.inviter_id ${where}`).get(...params).n;
     const guests = db.prepare(`SELECT g.id,g.inviter_id,g.first_name,g.last_name,g.dni,g.gender,g.created_at,g.entered_at,g.revoked,i.name AS inviter_name,i.active AS inviter_active
-      FROM guests g JOIN inviters i ON i.id=g.inviter_id ${where} ORDER BY ${order} LIMIT 50 OFFSET ?`).all(...params, (page - 1) * 50);
+      FROM guests g JOIN inviters i ON i.id=g.inviter_id ${where} ORDER BY ${order} ${exportAll ? '' : 'LIMIT 50 OFFSET ?'}`).all(...(exportAll ? params : [...params,(page-1)*50]));
     return { guests, total, page, pages: Math.ceil(total / 50) };
   };
   const securityHeaders = (res) => {
@@ -251,6 +252,12 @@ export function createApplication(options = {}) {
         const available = db.prepare(`SELECT COALESCE(SUM(MAX(0,capacity-(SELECT COUNT(*) FROM guests g WHERE g.inviter_id=i.id))),0) AS n FROM inviters i WHERE active=1`).get().n;
         const pending = db.prepare('SELECT COUNT(*) AS n FROM guests g JOIN inviters i ON i.id=g.inviter_id WHERE g.entered_at IS NULL AND g.revoked=0 AND i.active=1').get().n;
         return json(res, 200, { ...totals, demographics: genderStats(db.prepare('SELECT gender,COUNT(*) AS count FROM guests GROUP BY gender').all()), available: registration().active ? registration().available : 0, pending, inviters: db.prepare('SELECT COUNT(*) AS n FROM inviters').get().n });
+      }
+      if (path === '/api/guests.pdf' && method === 'GET') {
+        requireUser(req,'admin');limiter(req,'pdf-export',20);
+        const data=guestsQuery(url,true);const inviter=url.searchParams.get('inviter') ? db.prepare('SELECT name FROM inviters WHERE id=?').get(url.searchParams.get('inviter')) : null;
+        const pdf=await createGuestPdf({guests:data.guests,event:getSettings(),filters:url.searchParams,inviterName:inviter?.name});
+        res.writeHead(200,{'Content-Type':'application/pdf','Content-Disposition':'attachment; filename="los-cedros-lista.pdf"'});return res.end(pdf);
       }
       if (path === '/api/guests' && method === 'GET') { requireUser(req); return json(res, 200, guestsQuery(url)); }
       const guestRoute = /^\/api\/guests\/([a-f0-9-]+)\/(enter|revoke|gender)$/.exec(path);

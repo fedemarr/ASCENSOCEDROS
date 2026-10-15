@@ -22,10 +22,13 @@
   "dependencies": {
     "@neondatabase/serverless": "^1.2.0",
     "@vercel/blob": "^2.8.1",
+    "pdfkit": "^0.20.2",
     "sharp": "^0.35.5"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",
-    "@playwright/test": "^1.64.0"
+    "@napi-rs/canvas": "^1.0.11",
+    "@playwright/test": "^1.64.0",
+    "pdfjs-dist": "^6.4.299"
   }
 }

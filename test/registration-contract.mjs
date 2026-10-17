@@ -41,7 +41,7 @@ export function registrationContract(label, context) {
     const dupes=await Promise.all([register('60123456',{inviter_name:'Martín López'}),register('60123456',{inviter_name:'martin lopez'})]);
     assert.deepEqual(dupes.map(r=>r.status).sort(),[201,409]);
     await admin('/api/registration',{capacity:10000,active:false});
-    assert.equal((await register('70123456')).status,410);
+    const closed=await register('70123456');assert.equal(closed.status,410);assert.match(closed.data.error,/1127056803/);
     assert.equal((await req('/api/registration')).data.active,false);
     await admin('/api/registration',{capacity:10000,active:true});
   });

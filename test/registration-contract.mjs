@@ -123,4 +123,21 @@ export function registrationContract(label, context) {
     const text=(await readPdf(await response.arrayBuffer())).join(' ');
     assert.match(text,/40123456/);assert.doesNotMatch(text,/60123456/);assert.match(text,/1 persona/);
   });
+  test(label+': carga privada con lista cerrada, atribución al usuario y DNI único',async()=>{
+    const count=(await req('/api/stats',{cookie:context().admin})).data.registered;
+    await admin('/api/registration',{capacity:count,active:false});
+    const body={first_name:'Invitado',last_name:'Privado',dni:'90123456',gender:'male',inviter_name:'No autorizado',inviter_id:'ignored'};
+    const manual=(extras={},cookie=context().admin)=>req('/api/guests',{method:'POST',cookie,body:{...body,...extras}});
+    assert.equal((await req('/api/guests',{method:'POST',body})).status,401);
+    assert.equal((await manual({},context().security)).status,403);
+    assert.equal((await manual({dni:'123'})).status,400);assert.equal((await manual({gender:'invalid'})).status,400);
+    const duplicate=await Promise.all([manual(),manual()]);assert.deepEqual(duplicate.map(r=>r.status).sort(),[201,409]);
+    const results=await Promise.all([manual({dni:'90123457'}),manual({dni:'90123458'})]);assert.ok(results.every(r=>r.status===201));
+    const rows=(await req('/api/guests?inviter_name=admin',{cookie:context().security})).data;
+    assert.equal(rows.total,3);assert.ok(rows.guests.every(g=>g.inviter_name==='Admin'));assert.equal(new Set(rows.guests.map(g=>g.inviter_id)).size,1);
+    assert.equal((await req('/api/registration')).data.active,false);assert.equal((await register('90123459')).status,410);
+    assert.equal((await req('/api/stats',{cookie:context().admin})).data.registered,count+3);
+    await admin('/api/inviters/'+rows.guests[0].inviter_id,{active:false});assert.equal((await manual({dni:'90123459'})).status,403);
+    await admin('/api/inviters/'+rows.guests[0].inviter_id,{active:true});
+  });
 }

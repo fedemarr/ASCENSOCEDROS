@@ -100,6 +100,12 @@ test('flyer, registro, administración y dos celulares sincronizados', async ({ 
   await expect(guest.locator('#registration-form')).toHaveCount(0);await noOverflow(guest);
   await guest.screenshot({path:'test-results/lista-cerrada-mobile.png',fullPage:true});
   await guest.goto(base);await expect(guest.locator('.registration-closed')).toBeVisible();await expect(guest.getByRole('link',{name:'Registrarme'})).toHaveCount(0);
+  await admin.getByRole('button',{name:'Invitados',exact:true}).click();
+  await admin.getByRole('button',{name:'Agregar invitado',exact:true}).click();
+  await admin.locator('#manual-guest-form [name=first_name]').fill('Nuevo');await admin.locator('#manual-guest-form [name=last_name]').fill('Invitado');await admin.locator('#manual-guest-form [name=dni]').fill('40222222');
+  await admin.getByRole('button',{name:'Guardar invitado',exact:true}).click();await expect(admin.getByRole('button',{name:'Nuevo Invitado',exact:true})).toBeVisible();
+  await b.getByRole('searchbox').fill('40222222');await expect(b.getByRole('button',{name:'Nuevo Invitado',exact:true})).toBeVisible();await expect(b.locator('.guest-inviter')).toContainText('Admin');
+  expect((await (await admin.request.get(`${base}/api/registration`)).json()).active).toBe(false);
   expect(errors).toEqual([]);
   await context.close(); await guestContext.close(); await phoneA.close(); await phoneB.close();
 });

@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { cloudDatabase } from '../cloud/database.mjs';
 import { hashPassword } from '../cloud/security.mjs';
 const username=process.argv[2];
-if (!['admin','seguridad'].includes(username)) throw new Error('Uso: npm run password:cloud -- admin (o seguridad)');
+if (!['admin','seguridad','fede'].includes(username)) throw new Error('Uso: npm run password:cloud -- admin (o seguridad, o fede)');
 const db=cloudDatabase();
 const [user]=await db.query('SELECT id FROM users WHERE username=$1',[username]);
 if (!user) throw new Error('Usuario no encontrado.');

@@ -259,6 +259,21 @@ export function createApplication(options = {}) {
         const pdf=await createGuestPdf({guests:data.guests,event:getSettings(),filters:url.searchParams,inviterName:inviter?.name});
         res.writeHead(200,{'Content-Type':'application/pdf','Content-Disposition':'attachment; filename="los-cedros-lista.pdf"'});return res.end(pdf);
       }
+      if (path === '/api/guests' && method === 'POST') {
+        const user=requireUser(req,'admin');limiter(req,'manual-register',60);const body=await readBody(req);
+        const first=textField(body.first_name,'Nombre');const last=textField(body.last_name,'Apellido');const dni=String(body.dni || '').replace(/[.\s]/g,'');const gender=body.gender ?? 'unknown';
+        if (!/^\d{7,8}$/.test(dni)) fail(400,'Ingresá un DNI válido de 7 u 8 números.');if (!genders.includes(gender)) fail(400,'Género inválido.');
+        const id=randomUUID();let inviter;db.exec('BEGIN IMMEDIATE');
+        try {
+          if (db.prepare('SELECT id FROM guests WHERE dni=?').get(dni)) fail(409,'Este DNI ya está registrado para el evento.');
+          const mapping=db.prepare('SELECT value FROM settings WHERE key=?').get('_staff_inviter_'+user.id);
+          if(mapping){inviter=db.prepare('SELECT * FROM inviters WHERE id=?').get(mapping.value);if(!inviter)fail(404,'Invitador no encontrado.');if(!inviter.active)fail(403,'Acceso revocado. Consultá a administración.');}
+          else{inviter={id,name:user.username[0].toUpperCase()+user.username.slice(1)};db.prepare('INSERT INTO inviters VALUES(?,?,?,?,?,1,?)').run(id,inviter.name,'staff-'+user.username,randomBytes(32).toString('base64url'),10000,now());db.prepare('INSERT INTO settings VALUES(?,?)').run('_staff_inviter_'+user.id,id);}
+          db.prepare('INSERT INTO guests(id,inviter_id,first_name,last_name,dni,search_name,photo,created_at,gender) VALUES(?,?,?,?,?,?,?,?,?)').run(id,inviter.id,first,last,dni,normalize(first+' '+last),Buffer.alloc(0),now(),gender);
+          audit(user,'registered_manually',id);db.exec('COMMIT');
+        }catch(error){db.exec('ROLLBACK');throw error;}
+        broadcast();return json(res,201,{ok:true,id,first_name:first,last_name:last,inviter_name:inviter.name});
+      }
       if (path === '/api/guests' && method === 'GET') { requireUser(req); return json(res, 200, guestsQuery(url)); }
       const guestRoute = /^\/api\/guests\/([a-f0-9-]+)\/(enter|revoke|gender)$/.exec(path);
       if (guestRoute) {

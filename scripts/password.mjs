@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 if (existsSync(join(root, '.env'))) process.loadEnvFile(join(root, '.env'));
 const username = process.argv[2];
-if (!['admin', 'seguridad'].includes(username)) { console.error('Uso: npm run password -- admin (o seguridad)'); process.exit(1); }
+if (!['admin', 'seguridad', 'fede'].includes(username)) { console.error('Uso: npm run password -- admin (o seguridad, o fede)'); process.exit(1); }
 const dir = resolve(process.env.DATA_DIR || join(root, 'data'));
 if (!existsSync(join(dir, 'cedros.sqlite'))) { console.error('Primero iniciá el sistema con npm start.'); process.exit(1); }
 const db = new DatabaseSync(join(dir, 'cedros.sqlite'));

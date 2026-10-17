@@ -161,6 +161,13 @@ export function createCloudHandler(options={}) {
         const pdf=await createGuestPdf({guests:data.guests,event,filters:url.searchParams,inviterName:inviter?.name});
         res.writeHead(200,{'Content-Type':'application/pdf','Content-Disposition':'attachment; filename="los-cedros-lista.pdf"'});return res.end(pdf);
       }
+      if (path==='/api/guests' && method==='POST') {
+        const user=await requireUser(req,'admin');await limiter(req,'manual-register',60);const body=await readBody(req);
+        const first=textField(body.first_name,'Nombre');const last=textField(body.last_name,'Apellido');const dni=String(body.dni || '').replace(/[.\s]/g,'');const gender=body.gender ?? 'unknown';
+        if (!/^\d{7,8}$/.test(dni)) fail(400,'Ingresá un DNI válido de 7 u 8 números.');if (!genders.includes(gender)) fail(400,'Género inválido.');
+        const id=randomUUID();const result=await one('SELECT register_staff_guest($1,$2,$3,$4,$5,$6,$7,$8) AS inviter_name',[id,user.id,first,last,dni,normalize(first+' '+last),gender,now()]);
+        return json(res,201,{ok:true,id,first_name:first,last_name:last,inviter_name:result.inviter_name});
+      }
       if (path==='/api/guests' && method==='GET') { await requireUser(req); return json(res,200,await guestsQuery(url)); }
       const guestRoute=/^\/api\/guests\/([a-f0-9-]+)\/(enter|revoke|gender)$/.exec(path);
       if (guestRoute) {

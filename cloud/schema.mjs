@@ -63,6 +63,32 @@ export const schemaStatements = [
   `CREATE TABLE IF NOT EXISTS changes (id INTEGER PRIMARY KEY CHECK(id=1), version BIGINT NOT NULL DEFAULT 0)`,
   `INSERT INTO changes(id,version) VALUES (1,0) ON CONFLICT DO NOTHING`,
   `CREATE TABLE IF NOT EXISTS rate_limits (key TEXT PRIMARY KEY, count INTEGER NOT NULL, until BIGINT NOT NULL)`,
+  `CREATE OR REPLACE FUNCTION register_staff_guest(p_id TEXT,p_user TEXT,p_first TEXT,p_last TEXT,p_dni TEXT,p_search TEXT,p_gender TEXT,p_time TEXT)
+    RETURNS TEXT LANGUAGE plpgsql AS $$
+    DECLARE actor users%ROWTYPE; inv inviters%ROWTYPE; inv_id TEXT; label TEXT;
+    BEGIN
+      PERFORM value FROM settings WHERE key='_registration_capacity' FOR UPDATE;
+      SELECT * INTO actor FROM users WHERE id=p_user AND role='admin' FOR UPDATE;
+      IF NOT FOUND THEN RAISE EXCEPTION 'FORBIDDEN'; END IF;
+      IF EXISTS(SELECT 1 FROM guests WHERE dni=p_dni) THEN RAISE EXCEPTION 'DUPLICATE_DNI'; END IF;
+      SELECT value INTO inv_id FROM settings WHERE key='_staff_inviter_'||p_user;
+      IF inv_id IS NULL THEN
+        label := upper(left(actor.username,1))||substr(actor.username,2);
+        INSERT INTO inviters(id,name,slug,token,capacity,active,created_at)
+          VALUES(p_id,label,'staff-'||actor.username,p_id,10000,1,p_time) RETURNING * INTO inv;
+        INSERT INTO settings(key,value) VALUES('_staff_inviter_'||p_user,inv.id);
+      ELSE
+        SELECT * INTO inv FROM inviters WHERE id=inv_id FOR UPDATE;
+        IF NOT FOUND THEN RAISE EXCEPTION 'NOT_FOUND'; END IF;
+        IF inv.active=0 THEN RAISE EXCEPTION 'REVOKED'; END IF;
+      END IF;
+      INSERT INTO guests(id,inviter_id,first_name,last_name,dni,search_name,photo_path,created_at,gender)
+        VALUES(p_id,inv.id,p_first,p_last,p_dni,p_search,'',p_time,p_gender);
+      INSERT INTO audit(user_id,action,target_id,created_at) VALUES(p_user,'registered_manually',p_id,p_time);
+      UPDATE changes SET version=version+1 WHERE id=1;
+      RETURN inv.name;
+    END
+  $$`,
   `CREATE OR REPLACE FUNCTION register_shared_guest_gender(
     p_id TEXT,p_inviter TEXT,p_inviter_key TEXT,p_first TEXT,p_last TEXT,p_dni TEXT,p_search TEXT,p_created TEXT,p_gender TEXT
   ) RETURNS TEXT LANGUAGE plpgsql AS $$

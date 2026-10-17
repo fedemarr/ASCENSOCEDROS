@@ -202,7 +202,7 @@ export function createCloudHandler(options={}) {
       res.writeHead(200,{ 'Content-Type':asset?.[1] || 'text/html; charset=utf-8' }); return res.end(method==='HEAD' ? undefined : readFileSync(join(ROOT,'public',asset?.[0] || 'index.html')));
     } catch (e) {
       if (res.headersSent) { res.end(); return; }
-      const codes={ INVALID_LINK:[404,'Este link de invitación no es válido.'],REVOKED:[403,'Acceso revocado. Consultá a administración.'],DUPLICATE_DNI:[409,'Este DNI ya está registrado para el evento.'],FULL:[409,'El cupo del evento está completo.'],REGISTRATION_CLOSED:[410,'Gracias por querer anotarte, pero cerramos lista. Cualquier consulta: 1127056803'],NOT_FOUND:[404,'Invitado no encontrado.'],CAPACITY_TOO_SMALL:[400,'El cupo no puede ser menor a la cantidad de registrados.'] };
+      const codes={ INVALID_LINK:[404,'Este link de invitación no es válido.'],REVOKED:[403,'Acceso revocado. Consultá a administración.'],DUPLICATE_DNI:[409,'Este DNI ya está registrado para el evento.'],FULL:[409,'El cupo del evento está completo.'],REGISTRATION_CLOSED:[410,'Gracias por querer anotarte, pero cerramos lista. Cualquier consulta: 1127056803 (fedem)'],NOT_FOUND:[404,'Invitado no encontrado.'],CAPACITY_TOO_SMALL:[400,'El cupo no puede ser menor a la cantidad de registrados.'] };
       const mapped=e.code==='23505' ? codes.DUPLICATE_DNI : codes[e.message];
       if (!e.status && !mapped) console.error('Error de servicio:',e.code || e.name);
       json(res,e.status || mapped?.[0] || 503,{ error:e.status ? e.message : mapped?.[1] || 'No pudimos completar la operación. Volvé a intentar.' });

@@ -96,7 +96,7 @@ test('flyer, registro, administración y dos celulares sincronizados', async ({ 
   await admin.request.patch(`${base}/api/registration`,{headers:{'X-Requested-With':'LosCedros'},data:{capacity:config.capacity,active:false}});
   await guest.goto(`${base}/invitacion`);
   await expect(guest.getByRole('heading',{name:'Gracias por querer anotarte, pero cerramos lista.'})).toBeVisible();
-  await expect(guest.getByRole('link',{name:'1127056803'})).toHaveAttribute('href','tel:1127056803');
+  await expect(guest.locator('.registration-closed a')).toHaveCount(0);
   await expect(guest.locator('#registration-form')).toHaveCount(0);await noOverflow(guest);
   await guest.screenshot({path:'test-results/lista-cerrada-mobile.png',fullPage:true});
   await guest.goto(base);await expect(guest.locator('.registration-closed')).toBeVisible();await expect(guest.getByRole('link',{name:'Registrarme'})).toHaveCount(0);

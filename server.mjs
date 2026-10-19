@@ -225,7 +225,7 @@ export function createApplication(options = {}) {
         const id=randomUUID(); let inviter;
         db.exec('BEGIN IMMEDIATE');
         try {
-          const config=registration(); if (!config.active) fail(410,'Gracias por querer anotarte, pero cerramos lista. Cualquier consulta: 1127056803 (fedem)');
+          const config=registration(); if (!config.active) fail(410,'Gracias por querer anotarte, pero cerramos lista.');
           if (db.prepare('SELECT id FROM guests WHERE dni=?').get(dni)) fail(409,'Este DNI ya está registrado para el evento.');
           if (!config.available) fail(409,'El cupo del evento está completo.');
           inviter=db.prepare('SELECT * FROM inviters ORDER BY created_at,id').all().find(i=>normalize(i.name)===normalize(inviterName));

@@ -61,7 +61,7 @@ function flyer(event, compact = false) {
   const words = event.title.trim().split(/\s+/); const last = words.pop();
   return `<div class="flyer ${compact ? 'compact' : ''}" id="flyer"><div class="flyer-photo"></div><div class="flyer-shade"></div><div class="flyer-top"><span class="eyebrow">EL CLUB. LOS AMIGOS. LA NOCHE.</span><img src="/assets/escudo.png" alt="Los Cedros Rugby Club"></div><div class="flyer-body"><div class="flyer-age"><strong>+18</strong><span>EXCLUSIVO PARA MAYORES DE 18 AÑOS</span></div><span class="flyer-kicker">NOS VEMOS EN CASA</span><h1>${esc(words.join(' '))}<br><em>${esc(last)}</em><span class="title-dot">.</span></h1><p>${esc(event.subtitle)}</p><div class="flyer-rule"></div>${eventDetails(event)}</div><div class="flyer-bottom"><span>CEDRENSE SIEMPRE</span><span class="flyer-number">LC<span> / NIGHT</span></span></div></div>`;
 }
-function closedRegistrationMessage() {return '<div class="registration-closed"><span class="eyebrow">LISTA CERRADA</span><h3>Gracias por querer anotarte, pero cerramos lista.</h3><p>Cualquier consulta:</p><a class="button secondary" href="tel:1127056803">1127056803 · fedem</a></div>';}
+function closedRegistrationMessage() {return '<div class="registration-closed"><span class="eyebrow">LISTA CERRADA</span><h3>Gracias por querer anotarte, pero cerramos lista.</h3></div>';}
 async function renderLanding() {
   document.title = 'Los Cedros Night · El club. Los amigos. La noche.';
   const event = state.event; const registration = await api('/api/registration');
